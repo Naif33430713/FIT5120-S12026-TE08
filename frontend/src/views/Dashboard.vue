@@ -74,18 +74,21 @@ ENABLE REMINDER
 
 async function enableReminder() {
 
-  if (!uvData.value) return
+  if (!uvData.value || !uvData.value.reapply_minutes) {
+
+    alert("UV guidance not available yet")
+
+    return
+  }
+
+  const interval = Number(uvData.value.reapply_minutes)
 
   enableNotifications()
 
-  const interval = uvData.value.reapply_minutes
-
   try {
 
-    await api.post("/api/reminder/create", {
-
+    await api.post("/api/reminder", {
       interval_minutes: interval
-
     })
 
     startReminder(interval)
@@ -257,9 +260,19 @@ RUN WHEN DASHBOARD LOADS
 -------------------------------------
 */
 
-onMounted(() => {
+onMounted(async () => {
 
-  loadReminder()
+  try {
+
+    await api.get("/api/auth/user")
+
+    loadReminder()
+
+  } catch {
+
+    console.log("User not logged in")
+
+  }
 
 })
 
