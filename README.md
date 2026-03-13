@@ -150,19 +150,6 @@ This fulfils **US3.3 / AC1 View Clothing Advice**.
   - `Reminder` – per‑user reminder interval/state.
   - `UVGuidance` – UV ranges and their associated risk level, clothing, sunscreen dosage, and reapply minutes.
 
-Visualization:
-
-```mermaid
-flowchart TD
-  User[User] --> Browser[VueFrontend_Vite_5173]
-  Browser -->|"GET /api/uv?lat&lon"| Backend
-  Backend -->|"OpenWeatherWeatherAPI"| OpenWeather[OpenWeather]
-  Backend -->|"Query UVGuidance + Reminder"| Postgres[(Postgres_Prisma)]
-  Browser -->|"Enable/Disable Reminder"| Backend
-  Browser -->|"WebNotifications"| User
-```
-
----
 
 ### Tech stack
 
