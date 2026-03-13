@@ -155,7 +155,6 @@ Visualization:
 ```mermaid
 flowchart TD
   User[User] --> Browser[VueFrontend_Vite_5173]
-  Browser -->|"GoogleOAuth"| Backend[ExpressBackend_3000]
   Browser -->|"GET /api/uv?lat&lon"| Backend
   Backend -->|"OpenWeatherWeatherAPI"| OpenWeather[OpenWeather]
   Backend -->|"Query UVGuidance + Reminder"| Postgres[(Postgres_Prisma)]
