@@ -5,7 +5,13 @@ const passport = require("./auth/googleAuth")
 
 const app = express()
 
-app.use(cors())
+app.use(
+  cors({
+    origin: "http://localhost:5173",
+    credentials: true
+  })
+)
+
 app.use(express.json())
 
 // Session configuration
@@ -21,26 +27,70 @@ app.use(
 app.use(passport.initialize())
 app.use(passport.session())
 
-// Existing route
+// Existing routes
 app.use("/api/onboarding", require("./routes/onboarding"))
-
-// UV API route
 app.use("/api/uv", require("./routes/uv"))
+app.use("/api/reminder", require("./routes/reminder"))
 
-// Google login route
+/*
+-------------------------------------
+Google Authentication
+-------------------------------------
+*/
+
+// Login route
 app.get(
   "/auth/google",
   passport.authenticate("google", { scope: ["profile", "email"] })
 )
 
-// Google callback
+// Callback route
 app.get(
   "/auth/google/callback",
   passport.authenticate("google", { failureRedirect: "/" }),
   (req, res) => {
-    res.send("Login successful")
+
+    // redirect to Vue dashboard
+    res.redirect("http://localhost:5173/dashboard")
+
   }
 )
+
+/*
+-------------------------------------
+Auth check endpoint
+-------------------------------------
+*/
+
+app.get("/api/auth/user", (req, res) => {
+
+  if (req.user) {
+
+    res.json(req.user)
+
+  } else {
+
+    res.status(401).json({ message: "Not authenticated" })
+
+  }
+
+})
+
+/*
+-------------------------------------
+Logout
+-------------------------------------
+*/
+
+app.get("/api/auth/logout", (req, res) => {
+
+  req.logout(() => {
+
+    res.redirect("http://localhost:5173")
+
+  })
+
+})
 
 app.get("/test", (req, res) => {
   res.send("Server is working")
