@@ -16,20 +16,18 @@ router.get("/", async (req, res) => {
 
     const apiKey = process.env.OPENWEATHER_API_KEY
     const weather = await axios.get(
-  `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${apiKey}&units=metric`
-)
+      `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${apiKey}&units=metric`
+    )
 
-// fallback UV approximation (OpenWeather free plan limitation)
-const uvIndex = weather.data.uvi || weather.data.clouds?.all / 10 || 5
-
-    
-
-    
+    // fallback UV approximation (OpenWeather free plan limitation)
+    const rawUvIndex = weather.data.uvi || weather.data.clouds?.all / 10 || 5
+    const uvIndex = Number(rawUvIndex)
+    const uvBucket = Math.floor(uvIndex)
 
     const guidance = await prisma.uVGuidance.findFirst({
       where: {
-        uv_min: { lte: uvIndex },
-        uv_max: { gte: uvIndex }
+        uv_min: { lte: uvBucket },
+        uv_max: { gte: uvBucket }
       }
     })
 

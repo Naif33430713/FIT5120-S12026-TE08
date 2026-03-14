@@ -1,6 +1,7 @@
 <script setup>
 
 import { ref, onMounted } from "vue"
+import { RouterLink } from "vue-router"
 import api from "../services/api"
 
 const uvData = ref(null)
@@ -12,22 +13,69 @@ const locationName = ref("")
 
 let reminderTimer = null
 const reminderEnabled = ref(false)
+const showProtection = ref(false)
+const reminderIntervalMinutesKey = "sunscreenReminderIntervalMinutes"
+const reminderEnabledKey = "sunscreenReminderEnabled"
 
 /*
 -------------------------------------
-UV COLOR LOGIC
+UV COLOR & WARNING LOGIC
 -------------------------------------
 */
 
 function getUVColor(index) {
+  const value = Number(index ?? 0)
 
-  if (index <= 2) return "green"
-  if (index <= 5) return "gold"
-  if (index <= 7) return "orange"
-  if (index <= 10) return "red"
+  if (value <= 2) return "#22c55e" // green
+  if (value <= 5) return "#eab308" // yellow
+  if (value <= 7) return "#f97316" // orange
+  if (value <= 10) return "#ef4444" // red
 
-  return "purple"
+  return "#a855f7" // purple
+}
 
+function getUvWarning(uvIndex, minutes) {
+  const value = Number(uvIndex ?? 0)
+  const mins = Number(minutes ?? 0)
+
+  if (value <= 2) {
+    return "Minimal risk. No protection required unless outside for extended periods or near reflective surfaces (snow/water)."
+  }
+
+  if (value <= 5) {
+    return "Moderate risk. Seek shade, wear clothing, hat, and sunglasses, and apply SPF 50+ sunscreen."
+  }
+
+  if (value <= 7) {
+    return "High risk. Same as moderate, but take extra care, especially between 10 am and 4 pm."
+  }
+
+  if (value <= 10) {
+    return "Very high risk. Avoid sun between 10 am and 4 pm, use all protection measures."
+  }
+
+  return "Extreme risk. Take all precautions. Unprotected skin burns in minutes."
+}
+
+function hexToRgba(hex, alpha) {
+  const normalized = String(hex).replace("#", "")
+  if (normalized.length !== 6) return `rgba(0, 0, 0, ${alpha})`
+
+  const r = parseInt(normalized.slice(0, 2), 16)
+  const g = parseInt(normalized.slice(2, 4), 16)
+  const b = parseInt(normalized.slice(4, 6), 16)
+
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
+function getUvMessageStyle(uvIndex) {
+  const base = getUVColor(uvIndex)
+
+  return {
+    borderColor: base,
+    backgroundColor: hexToRgba(base, 0.12),
+    color: "#111827"
+  }
 }
 
 /*
@@ -56,11 +104,21 @@ function startReminder(minutes) {
 
   const interval = minutes * 60000
 
+  if (reminderTimer) {
+
+    clearInterval(reminderTimer)
+
+  }
+
   reminderTimer = setInterval(() => {
 
-    new Notification("Sunscreen Reminder", {
-      body: "Time to reapply sunscreen ☀"
-    })
+    if ("Notification" in window && Notification.permission === "granted") {
+
+      new Notification("Sunscreen Reminder", {
+        body: "Time to reapply sunscreen ☀"
+      })
+
+    }
 
   }, interval)
 
@@ -84,22 +142,10 @@ async function enableReminder() {
   const interval = Number(uvData.value.reapply_minutes)
 
   enableNotifications()
-
-  try {
-
-    await api.post("/api/reminder", {
-      interval_minutes: interval
-    })
-
-    startReminder(interval)
-
-    reminderEnabled.value = true
-
-  } catch (err) {
-
-    console.error("Reminder save failed", err)
-
-  }
+  startReminder(interval)
+  reminderEnabled.value = true
+  localStorage.setItem(reminderEnabledKey, "true")
+  localStorage.setItem(reminderIntervalMinutesKey, String(interval))
 
 }
 
@@ -108,7 +154,6 @@ async function enableReminder() {
 DISABLE REMINDER
 -------------------------------------
 */
-
 async function disableReminder() {
 
   if (reminderTimer) {
@@ -117,46 +162,10 @@ async function disableReminder() {
 
   }
 
-  try {
-
-    await api.post("/api/reminder/disable")
-
-  } catch (err) {
-
-    console.error(err)
-
-  }
-
   reminderEnabled.value = false
 
-}
-
-/*
--------------------------------------
-LOAD REMINDER FROM DATABASE
--------------------------------------
-*/
-
-async function loadReminder() {
-
-  try {
-
-    const res = await api.get("/api/reminder")
-
-    if (res.data && res.data.is_active) {
-
-      //startReminder(res.data.interval_minutes)
-      startReminder(0.1)
-
-      reminderEnabled.value = true
-
-    }
-
-  } catch (err) {
-
-    console.log("No active reminder")
-
-  }
+  localStorage.removeItem(reminderEnabledKey)
+  localStorage.removeItem(reminderIntervalMinutesKey)
 
 }
 
@@ -185,27 +194,6 @@ async function fetchUV(lat, lon) {
   }
 
   loading.value = false
-
-}
-
-/*
--------------------------------------
-USE CURRENT LOCATION
--------------------------------------
-*/
-
-function useMyLocation() {
-
-  navigator.geolocation.getCurrentPosition((pos) => {
-
-    const lat = pos.coords.latitude
-    const lon = pos.coords.longitude
-
-    locationName.value = "Current Location"
-
-    fetchUV(lat, lon)
-
-  })
 
 }
 
@@ -262,15 +250,14 @@ RUN WHEN DASHBOARD LOADS
 
 onMounted(async () => {
 
-  try {
+  const enabled = localStorage.getItem(reminderEnabledKey) === "true"
+  const storedInterval = Number(localStorage.getItem(reminderIntervalMinutesKey) || "0")
 
-    await api.get("/api/auth/user")
+  if (enabled && storedInterval > 0) {
 
-    loadReminder()
-
-  } catch {
-
-    console.log("User not logged in")
+    enableNotifications()
+    startReminder(storedInterval)
+    reminderEnabled.value = true
 
   }
 
@@ -279,132 +266,629 @@ onMounted(async () => {
 </script>
 
 <template>
+  <div class="dashboard-root">
+    <header class="app-header">
+      <div class="app-logo">
+        <span class="app-logo-emoji">☀️</span>
+        <span class="app-logo-text">SunShield</span>
+      </div>
+      <nav class="app-nav">
+        <RouterLink to="/" class="app-nav-link app-nav-link--active">
+          Dashboard
+        </RouterLink>
+        <RouterLink to="/about" class="app-nav-link">
+          About
+        </RouterLink>
+      </nav>
+    </header>
 
-<div class="container">
+    <main class="dashboard">
+      <section class="hero">
+        <div class="hero-left">
+          <p class="hero-kicker">HELLO, WELCOME TO</p>
+          <h1 class="hero-title">
+            SunShield
+            <br />
+            <span class="hero-highlight">Your Sun Safety</span>
+          </h1>
+          <p class="hero-subtitle">
+            Track today&apos;s UV index and get sunscreen and clothing advice,
+            designed especially for your sun protection.
+          </p>
 
-<h1>☀ UV Protection Dashboard</h1>
+          <div class="hero-meta">
+            <span class="hero-dot"></span>
+            Live UV guidance
+            <span class="hero-separator">•</span>
+            Sun‑friendly tips
+          </div>
+        </div>
 
-<div class="location-box">
+        <div class="hero-right">
+          <div class="hero-emoji-card">
+            <span class="hero-emoji">☀️</span>
+            <p class="hero-emoji-label">SunShield</p>
+            <p class="hero-emoji-meta">Stay sun safe today</p>
+          </div>
+        </div>
+      </section>
 
-<input v-model="city" placeholder="Search city"/>
+      <section class="search-bar">
+        <input
+          v-model="city"
+          class="search-input"
+          placeholder="Search your Suburb"
+        />
+        <button class="search-button" @click="searchCity">
+          🔍 Search
+        </button>
+      </section>
 
-<button @click="searchCity">
-Search
-</button>
+      <section v-if="uvData" class="uv-section">
+        <div class="uv-circle-wrapper">
+          <div class="uv-circle">
+            <div class="uv-index">
+              {{ uvData.uv_index }}
+            </div>
+            <div class="uv-label">
+              {{ uvData.risk_level }}
+            </div>
+          </div>
+        </div>
 
-<button @click="useMyLocation">
-Use My Location
-</button>
+        <div class="uv-risk-banner" :style="{ backgroundColor: getUVColor(uvData.uv_index) }">
+          <span class="uv-risk-text">
+            {{ uvData.risk_level }} Risk
+          </span>
+        </div>
 
-</div>
+        <div class="uv-message-box" :style="getUvMessageStyle(uvData.uv_index)">
+          {{ getUvWarning(uvData.uv_index, uvData.reapply_minutes) }}
+        </div>
 
-<p v-if="locationName">
-📍 Location: {{ locationName }}
-</p>
+        <section class="protection-card">
+          <button
+            class="protection-header"
+            type="button"
+            @click="showProtection = !showProtection"
+            :aria-expanded="showProtection ? 'true' : 'false'"
+          >
+            <span>Sun Protection Recommendations</span>
+            <span class="protection-header-indicator">
+              {{ showProtection ? "−" : "+" }}
+            </span>
+          </button>
 
-<div v-if="loading">
-Fetching UV data...
-</div>
+          <div v-if="showProtection" class="protection-body">
+            <div class="protection-columns">
+              <div class="dosage-card">
+                <h3 class="section-title">Sunscreen Dosage</h3>
+                <p class="dosage-uv">
+                  Current UV Index {{ uvData.uv_index }} ({{ uvData.risk_level }})
+                </p>
+                <div class="dosage-box">
+                  {{ uvData.sunscreen }}
+                </div>
+                <p class="dosage-caption">
+                  Based on Cancer Council Australia teaspoon rule.
+                </p>
+                <p class="dosage-reapply">
+                  Reapply every <strong>{{ uvData.reapply_minutes }} minutes</strong>.
+                </p>
+              </div>
 
-<div v-if="error">
-{{ error }}
-</div>
+              <div class="clothing-card">
+                <h3 class="section-title">Clothing Recommendations</h3>
+                <p class="clothing-uv">
+                  {{ uvData.risk_level }} (UV {{ uvData.uv_index }})
+                </p>
+                <p class="clothing-text">
+                  {{ uvData.clothing }}
+                </p>
+              </div>
+            </div>
 
-<div v-if="uvData" class="card">
-
-<h2 :style="{color: getUVColor(uvData.uv_index)}">
-UV Index: {{ uvData.uv_index }}
-</h2>
-
-<p>
-<strong>⚠ Risk Level:</strong>
-{{ uvData.risk_level }}
-</p>
-
-<p>
-<strong>👕 Clothing Advice:</strong>
-{{ uvData.clothing }}
-</p>
-
-<p>
-<strong>🧴 Sunscreen Advice:</strong>
-{{ uvData.sunscreen }}
-</p>
-
-<p>
-<strong>⏱ Reapply Every:</strong>
-{{ uvData.reapply_minutes }} minutes
-</p>
-
-<div class="reminder-controls">
-
-<button v-if="!reminderEnabled" @click="enableReminder">
-🔔 Enable Reminder
-</button>
-
-<button v-if="reminderEnabled" @click="disableReminder">
-🔕 Disable Reminder
-</button>
-
-</div>
-
-</div>
-
-</div>
-
+            <div class="protection-reminder">
+              <p class="reminder-label">Sunscreen Reminders</p>
+              <div class="reminder-controls">
+                <button
+                  v-if="!reminderEnabled && uvData.uv_index >= 3"
+                  class="reminder-button"
+                  @click="enableReminder"
+                >
+                  🔔 Turn on reminders
+                </button>
+                <button
+                  v-if="reminderEnabled"
+                  class="reminder-button reminder-button-off"
+                  @click="disableReminder"
+                >
+                  🔕 Turn off reminders
+                </button>
+                <p v-if="uvData.uv_index < 3" class="reminder-note">
+                  UV is low right now; reminders are not needed.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+  </div>
 </template>
 
 <style>
-
-.container {
-
-max-width: 700px;
-margin: auto;
-padding: 40px;
-font-family: Arial;
-
+.dashboard-root {
+  min-height: 100vh;
+  background: linear-gradient(180deg, #fff7c4, #ffe0c2);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #222;
 }
 
-.location-box {
-
-margin-bottom: 20px;
-
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 32px;
+  background: #ffffffcc;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
 }
 
-.location-box input {
-
-padding: 8px;
-margin-right: 10px;
-
+.app-logo {
+  font-weight: 700;
+  font-size: 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.location-box button {
-
-padding: 8px 12px;
-margin-right: 10px;
-
+.app-logo-emoji {
+  font-size: 1.5rem;
 }
 
-.card {
+.app-logo-text {
+  letter-spacing: 0.02em;
+}
 
-background: #f5f5f5;
-padding: 25px;
-border-radius: 10px;
-box-shadow: 0px 4px 10px rgba(0,0,0,0.1);
+.app-nav {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
 
+.app-nav-link {
+  border: none;
+  background: transparent;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #374151;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.app-nav-link:hover {
+  background: rgba(255, 255, 255, 0.9);
+  color: #111827;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.app-nav-link--active {
+  background: #f97316;
+  color: #ffffff;
+  box-shadow: 0 4px 10px rgba(249, 115, 22, 0.3);
+}
+
+.dashboard {
+  max-width: 720px;
+  margin: 24px auto;
+  padding: 0 16px 24px;
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1.6fr);
+  gap: 32px;
+  align-items: center;
+  padding: 32px 0 24px;
+  min-height: 48vh;
+  color: #111827;
+}
+
+.hero-left {
+  max-width: 520px;
+}
+
+.hero-kicker {
+  font-size: 0.8rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #f97316;
+  margin-bottom: 8px;
+}
+
+.hero-title {
+  font-size: 2.6rem;
+  line-height: 1.1;
+  margin: 0 0 8px;
+}
+
+.hero-highlight {
+  color: #f97316;
+  font-weight: 800;
+}
+
+.hero-subtitle {
+  font-size: 0.98rem;
+  color: #4b5563;
+  margin-bottom: 16px;
+}
+
+.hero-actions {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.hero-primary {
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: none;
+  background: #f97316;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.hero-secondary {
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  color: #111827;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.hero-meta {
+  font-size: 0.85rem;
+  color: #6b7280;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hero-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #22c55e;
+}
+
+.hero-separator {
+  margin: 0 2px;
+}
+
+.hero-right {
+  display: flex;
+  justify-content: center;
+}
+
+.hero-emoji-card {
+  width: 260px;
+  border-radius: 24px;
+  background: rgba(255, 249, 240, 0.95);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.12);
+  padding: 24px 20px;
+  text-align: center;
+}
+
+.hero-emoji {
+  font-size: 3rem;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.hero-emoji-label {
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.hero-emoji-meta {
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+
+.search-bar {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin: 8px auto 8px;
+  max-width: 480px;
+}
+
+.summary-strip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0 auto 16px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 249, 240, 0.9);
+  font-size: 0.9rem;
+}
+
+.summary-location {
+  font-weight: 600;
+}
+
+.summary-uv {
+  font-weight: 700;
+}
+
+.search-input {
+  flex: 1;
+  max-width: 320px;
+  padding: 10px 12px;
+  border-radius: 999px;
+  border: 1px solid #d4d4d4;
+  font-size: 0.95rem;
+}
+
+.search-button {
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: none;
+  background: #f97316;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.search-button:hover {
+  background: #ea580c;
+}
+
+.status-messages {
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.status {
+  margin: 4px 0;
+  font-size: 0.95rem;
+}
+
+.status-loading {
+  color: #4b5563;
+}
+
+.status-error {
+  color: #b91c1c;
+}
+
+.status-location {
+  color: #374151;
+}
+
+.uv-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.uv-circle-wrapper {
+  display: flex;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.uv-circle {
+  width: 120px;
+  height: 120px;
+  border-radius: 999px;
+  border: 6px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+}
+
+.uv-index {
+  font-size: 2.75rem;
+  font-weight: 700;
+}
+
+.uv-label {
+  margin-top: 4px;
+  font-size: 0.95rem;
+  color: #4b5563;
+}
+
+.uv-risk-banner {
+  width: 100%;
+  max-width: 360px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  text-align: center;
+  color: #fff;
+  font-weight: 700;
+  background: #f97316;
+}
+
+.uv-risk-text {
+  font-size: 0.98rem;
+}
+
+.uv-message-box {
+  max-width: 440px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 2px dashed transparent;
+  background: transparent;
+  font-size: 0.95rem;
+  text-align: center;
+}
+
+.guidance-card {
+  width: 100%;
+  max-width: 460px;
+  margin-top: 8px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  background: #ffffffcc;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  font-size: 0.95rem;
+}
+
+.guidance-card p {
+  margin: 6px 0;
+}
+
+.protection-card {
+  width: 100%;
+  max-width: 520px;
+  margin-top: 12px;
+  border-radius: 16px;
+  background: #ffffffcc;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+}
+
+.protection-header {
+  width: 100%;
+  padding: 12px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: none;
+  background: transparent;
+  font-weight: 600;
+  font-size: 0.98rem;
+  cursor: pointer;
+}
+
+.protection-header-indicator {
+  font-size: 1.1rem;
+}
+
+.protection-body {
+  padding: 0 18px 16px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.protection-columns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.dosage-card,
+.clothing-card {
+  flex: 1 1 220px;
+}
+
+.section-title {
+  margin-bottom: 6px;
+  font-size: 0.98rem;
+  font-weight: 600;
+}
+
+.dosage-uv,
+.clothing-uv {
+  font-size: 0.9rem;
+  color: #4b5563;
+  margin-bottom: 6px;
+}
+
+.dosage-box {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f3f4f680;
+  font-size: 0.95rem;
+  margin-bottom: 6px;
+}
+
+.dosage-caption {
+  font-size: 0.8rem;
+  color: #6b7280;
+  margin-bottom: 4px;
+}
+
+.dosage-reapply {
+  font-size: 0.9rem;
+  color: #111827;
+}
+
+.clothing-text {
+  font-size: 0.95rem;
+}
+
+.protection-reminder {
+  margin-top: 12px;
+}
+
+.reminder-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 4px;
 }
 
 .reminder-controls {
-
-margin-top: 20px;
-
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 4px;
 }
 
-.reminder-controls button {
-
-padding: 10px 14px;
-margin-right: 10px;
-
+.reminder-button {
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: none;
+  background: #22c55e;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 0.9rem;
 }
 
+.reminder-button-off {
+  background: #9ca3af;
+}
+
+.reminder-button:hover {
+  opacity: 0.9;
+}
+
+.reminder-note {
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+
+@media (max-width: 600px) {
+  .dashboard {
+    margin: 24px auto;
+  }
+
+  .hero {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-right {
+    justify-content: flex-start;
+  }
+
+  .uv-circle {
+    width: 120px;
+    height: 120px;
+  }
+
+  .protection-body {
+    padding-inline: 14px;
+  }
+}
 </style>

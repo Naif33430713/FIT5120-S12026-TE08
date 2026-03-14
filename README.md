@@ -130,24 +130,19 @@ This fulfils **US3.3 / AC1 View Clothing Advice**.
 ### High‑level architecture
 
 - **Frontend** – Vue 3 + Vite SPA (`frontend/`)
-  - Routes: `/` (Login), `/dashboard` (UV Protection Dashboard).
-  - Talks to the backend via Axios with `baseURL: http://localhost:3000` and `withCredentials: true`.
+  - Route: `/` (UV Protection Dashboard homepage).
+  - Talks to the backend via Axios with `baseURL: http://localhost:3000`.
   - Uses the **Geolocation API**, **OpenWeather Geo API**, and **Web Notifications API** in the browser.
 
 - **Backend** – Express server (`backend/server.js`)
   - Listens on port **3000**.
   - Handles CORS for `http://localhost:5173` (the Vite dev server).
-  - Manages sessions (`express-session`) and Google OAuth via **Passport**.
   - Exposes routes:
-    - `/auth/google`, `/auth/google/callback` – Google login flow.
-    - `/api/auth/user` – returns the authenticated user.
-    - `/api/auth/logout` – logs out.
     - `/api/uv` – UV + guidance endpoint.
-    - `/api/reminder` + `/api/reminder/disable` – reminder management.
+    - `/api/onboarding` – onboarding/health-check endpoint.
+    - `/test` – simple health check.
 
 - **Database** – PostgreSQL via Prisma (`backend/prisma/schema.prisma`)
-  - `User` – Google identity (id, name, email) and relation to reminders.
-  - `Reminder` – per‑user reminder interval/state.
   - `UVGuidance` – UV ranges and their associated risk level, clothing, sunscreen dosage, and reapply minutes.
 
 
@@ -201,15 +196,10 @@ Create a `.env` file inside `backend/` (next to `server.js`) with at least:
 ```bash
 DATABASE_URL="postgresql://USER:PASSWORD@HOST:PORT/DATABASE_NAME?schema=public"
 OPENWEATHER_API_KEY="your_openweather_api_key"
-GOOGLE_CLIENT_ID="your_google_oauth_client_id"
-GOOGLE_CLIENT_SECRET="your_google_oauth_client_secret"
-SESSION_SECRET="some_long_random_string"
 ```
 
 - `DATABASE_URL` – standard PostgreSQL connection string.
 - `OPENWEATHER_API_KEY` – used on the backend for weather/UV approximation.
-- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` – from your Google Cloud OAuth client (redirect URI should match `/auth/google/callback` on port 3000).
-- `SESSION_SECRET` – used by `express-session` for signing the session cookie.
 
 #### Frontend configuration
 
@@ -219,6 +209,85 @@ Currently, the OpenWeather **Geo API** key is hard‑coded in `frontend/src/view
 - For local demos, the hard‑coded key will “just work” as long as it is valid.
 
 No additional frontend `.env` is strictly required to run the project locally in its current form.
+
+---
+
+## Database setup (PostgreSQL)
+
+The backend uses PostgreSQL via Prisma. You will need a database and some initial `UVGuidance` rows for the dashboard to show clothing/sunscreen recommendations.
+
+### 1. Create a database
+
+In `psql` (or your preferred client), create a database, for example:
+
+```sql
+CREATE DATABASE fit5120;
+```
+
+Update `DATABASE_URL` in `backend/.env` so it points at this database.
+
+### 2. Apply Prisma migrations
+
+From the `backend/` directory:
+
+```bash
+cd backend
+npm install
+npx prisma generate
+npx prisma migrate dev
+```
+
+This will create the `UVGuidance` table as defined in `backend/prisma/schema.prisma`.
+
+### 3. Seed `UVGuidance` with guidance rules
+
+The app expects at least five rows in `UVGuidance`, covering standard UV ranges. Run the following SQL against your database (for example via `psql`):
+
+```sql
+-- Optional: clear existing guidance
+-- DELETE FROM "UVGuidance";
+
+INSERT INTO "UVGuidance"
+  (uv_min, uv_max, risk_level, human_alert_template,
+   clothing_text, sunscreen_dosage_text, reapply_minutes)
+VALUES
+  -- 0–2 Low
+  (0, 2, 'Low',
+   'Minimal risk. No protection required unless outside for extended periods or near reflective surfaces (snow/water).',
+   'Normal clothing is usually sufficient. Consider covering up if you are outside for a long time, especially near water or snow.',
+   'Sunscreen is generally not required for short exposure. Use SPF 50+ if you are outside for extended periods.',
+   60),
+
+  -- 3–5 Moderate
+  (3, 5, 'Moderate',
+   'Moderate risk. Seek shade, wear clothing, hat, and sunglasses, and apply SPF 50+ sunscreen.',
+   'Wear long sleeves or a light overshirt, a broad‑brimmed hat and UV‑blocking sunglasses when outdoors.',
+   'Apply SPF 50+ broad‑spectrum sunscreen to all exposed skin.',
+   60),
+
+  -- 6–7 High
+  (6, 7, 'High',
+   'High risk. Same as moderate, but take extra care, especially between 10 am and 4 pm.',
+   'Choose loose‑fitting, long‑sleeved tops and long shorts or pants, plus a wide‑brimmed hat and UV‑blocking sunglasses.',
+   'Apply SPF 50+ generously and reapply regularly when outdoors.',
+   45),
+
+  -- 8–10 Very High
+  (8, 10, 'Very High',
+   'Very high risk. Avoid sun between 10 am and 4 pm, use all protection measures.',
+   'Maximise skin coverage with UPF‑rated clothing, long sleeves and pants, plus a broad‑brimmed hat and wrap‑around sunglasses.',
+   'Apply SPF 50+ sunscreen and reapply frequently, especially if sweating or swimming.',
+   30),
+
+  -- 11+ Extreme
+  (11, 50, 'Extreme',
+   'Extreme risk. Take all precautions. Unprotected skin burns in minutes.',
+   'Wear UPF 50+ clothing where possible, including long sleeves, long pants, a high‑coverage hat and UV‑blocking sunglasses. Avoid being outdoors in peak UV periods where you can.',
+   'Apply SPF 50+ sunscreen often; even brief unprotected exposure can cause burns.',
+   20);
+```
+
+After seeding, restart the backend if it is already running. The dashboard should now display risk level, clothing advice, sunscreen dosage and re‑apply timings for any location with a valid UV reading.
 
 ---
 
@@ -261,11 +330,6 @@ node server.js
 The backend will start on **http://localhost:3000**.
 
 - `http://localhost:3000/test` – simple health check (“Server is working”).
-- `http://localhost:3000/auth/google` – starts the Google sign‑in flow.
-
-Ensure that your Google OAuth client is configured with a redirect URI like:
-
-- `http://localhost:3000/auth/google/callback`
 
 #### 3. Start the frontend (Vite dev server)
 
@@ -279,20 +343,18 @@ npm run dev
 
 Vite will serve the app on **http://localhost:5173** by default.
 
-#### 4. Log in and use the dashboard
+#### 4. Use the dashboard
 
 1. Open `http://localhost:5173` in your browser.  
-2. Click **“Sign in with Google”** (this redirects to `http://localhost:3000/auth/google`).  
-3. After successful OAuth, you are redirected to `http://localhost:5173/dashboard`.
-4. On the **Dashboard**:
+2. On the **Dashboard** (homepage):
    - **Search city**: enter a city name and click **Search**.
    - **Use My Location**: click **Use My Location** to request browser geolocation.
    - View:
      - Current **UV Index** and coloured risk label.
      - **Clothing advice**.
      - **Sunscreen advice** and **reapply interval**.
-   - Use **🔔 Enable Reminder** to start re‑application reminders (you may be prompted to allow notifications).
-   - Use **🔕 Disable Reminder** to stop them and mark reminders inactive on the backend.
+   - Use **🔔 Enable Reminder** to start re‑application reminders in this browser (you may be prompted to allow notifications).
+   - Use **🔕 Disable Reminder** to stop them and clear reminder preferences from this browser.
 
 ---
 
