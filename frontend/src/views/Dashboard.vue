@@ -83,6 +83,28 @@ function getUvMessageStyle(uvIndex) {
   }
 }
 
+function getClothingEmojis(uvIndex) {
+  const value = Number(uvIndex ?? 0)
+
+  if (value <= 2) return "👒 🕶️"
+  if (value <= 5) return "👒 🕶️ 👕"
+  if (value <= 7) return "👒 🕶️ 👕 👖 ⛱️"
+  if (value <= 10) return "👒 🕶️ 👕 👖 ⛱️ ☀️"
+
+  return "☀️ 👒 🕶️ 👕 👖 ⛱️"
+}
+
+function getSunscreenEmojis(uvIndex) {
+  const value = Number(uvIndex ?? 0)
+
+  if (value <= 2) return "🧴"
+  if (value <= 5) return "🧴 ☀️"
+  if (value <= 7) return "🧴 ☀️ 💧"
+  if (value <= 10) return "🧴 ☀️ 💧 🛡️"
+
+  return "🧴 ☀️ 💧 🛡️"
+}
+
 /*
 -------------------------------------
 STOP REMINDER (shared cleanup)
@@ -313,6 +335,24 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="dashboard-root">
+    <div class="bg-emojis" aria-hidden="true">
+      <span class="bg-emoji bg-emoji-1">☀️</span>
+      <span class="bg-emoji bg-emoji-2">🌊</span>
+      <span class="bg-emoji bg-emoji-3">🏖️</span>
+      <span class="bg-emoji bg-emoji-4">👒</span>
+      <span class="bg-emoji bg-emoji-5">🕶️</span>
+      <span class="bg-emoji bg-emoji-6">⛱️</span>
+      <span class="bg-emoji bg-emoji-7">🌴</span>
+      <span class="bg-emoji bg-emoji-8">🧴</span>
+      <span class="bg-emoji bg-emoji-9">☀️</span>
+      <span class="bg-emoji bg-emoji-10">🏝️</span>
+      <span class="bg-emoji bg-emoji-11">👒</span>
+      <span class="bg-emoji bg-emoji-12">🕶️</span>
+      <span class="bg-emoji bg-emoji-12b">🏄</span>
+      <span class="bg-emoji bg-emoji-13">🏃🏻</span>
+      <span class="bg-emoji bg-emoji-14">🙋🏽</span>
+      <span class="bg-emoji bg-emoji-15">👩🏿</span>
+    </div>
     <header class="app-header">
       <div class="app-logo">
         <span class="app-logo-emoji">☀️</span>
@@ -372,7 +412,7 @@ onBeforeUnmount(() => {
 
       <section v-if="uvData" class="uv-section">
         <div class="uv-circle-wrapper">
-          <div class="uv-circle">
+          <div class="uv-circle" :style="{ borderColor: getUVColor(uvData.uv_index) }">
             <div class="uv-index">
               {{ uvData.uv_index }}
             </div>
@@ -406,12 +446,13 @@ onBeforeUnmount(() => {
           </button>
 
           <div v-if="showProtection" class="protection-body">
+            <p class="protection-uv-context">
+              Current UV Index {{ uvData.uv_index }} ({{ uvData.risk_level }})
+            </p>
             <div class="protection-columns">
               <div class="dosage-card">
                 <h3 class="section-title">Sunscreen Dosage</h3>
-                <p class="dosage-uv">
-                  Current UV Index {{ uvData.uv_index }} ({{ uvData.risk_level }})
-                </p>
+                <p class="dosage-emojis" aria-hidden="true">{{ getSunscreenEmojis(uvData.uv_index) }}</p>
                 <div class="dosage-box">
                   {{ uvData.sunscreen }}
                 </div>
@@ -423,11 +464,11 @@ onBeforeUnmount(() => {
                 </p>
               </div>
 
+              <div class="protection-divider" aria-hidden="true"></div>
+
               <div class="clothing-card">
                 <h3 class="section-title">Clothing Recommendations</h3>
-                <p class="clothing-uv">
-                  {{ uvData.risk_level }} (UV {{ uvData.uv_index }})
-                </p>
+                <p class="clothing-emojis" aria-hidden="true">{{ getClothingEmojis(uvData.uv_index) }}</p>
                 <p class="clothing-text">
                   {{ uvData.clothing }}
                 </p>
@@ -488,13 +529,47 @@ onBeforeUnmount(() => {
 
 <style>
 .dashboard-root {
+  position: relative;
   min-height: 100vh;
   background: linear-gradient(180deg, #fff7c4, #ffe0c2);
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: #222;
 }
 
+.bg-emojis {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 0;
+}
+
+.bg-emoji {
+  position: absolute;
+  font-size: 2rem;
+  opacity: 0.15;
+}
+
+.bg-emoji-1 { top: 8%; left: 5%; font-size: 2.5rem; }
+.bg-emoji-2 { top: 15%; right: 8%; font-size: 1.8rem; opacity: 0.12; }
+.bg-emoji-3 { top: 25%; left: 12%; font-size: 2.2rem; opacity: 0.1; }
+.bg-emoji-4 { top: 40%; right: 4%; font-size: 1.6rem; }
+.bg-emoji-5 { top: 55%; left: 3%; font-size: 2rem; opacity: 0.12; }
+.bg-emoji-6 { top: 65%; right: 15%; font-size: 2.4rem; opacity: 0.1; }
+.bg-emoji-7 { top: 75%; left: 8%; font-size: 2.8rem; opacity: 0.12; }
+.bg-emoji-8 { bottom: 20%; right: 6%; font-size: 1.8rem; }
+.bg-emoji-9 { bottom: 15%; left: 15%; font-size: 2.2rem; opacity: 0.1; }
+.bg-emoji-10 { bottom: 35%; right: 25%; font-size: 1.5rem; opacity: 0.12; }
+.bg-emoji-11 { top: 50%; left: 2%; font-size: 1.4rem; opacity: 0.08; }
+.bg-emoji-12 { top: 85%; right: 10%; font-size: 1.6rem; opacity: 0.1; }
+.bg-emoji-12b { top: 45%; left: 6%; font-size: 2rem; opacity: 0.12; }
+.bg-emoji-13 { top: 20%; right: 20%; font-size: 2rem; opacity: 0.12; }
+.bg-emoji-14 { top: 35%; right: 30%; font-size: 2.2rem; opacity: 0.11; }
+.bg-emoji-15 { top: 60%; right: 5%; font-size: 1.9rem; opacity: 0.1; }
+
 .app-header {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -550,6 +625,8 @@ onBeforeUnmount(() => {
 }
 
 .dashboard {
+  position: relative;
+  z-index: 1;
   max-width: 720px;
   margin: 24px auto;
   padding: 0 16px 24px;
@@ -672,9 +749,9 @@ onBeforeUnmount(() => {
 .search-bar {
   display: flex;
   justify-content: center;
-  gap: 8px;
-  margin: 8px auto 8px;
-  max-width: 480px;
+  gap: 12px;
+  margin: 12px auto 12px;
+  max-width: 560px;
 }
 
 .summary-strip {
@@ -698,15 +775,16 @@ onBeforeUnmount(() => {
 
 .search-input {
   flex: 1;
-  max-width: 320px;
-  padding: 10px 12px;
+  max-width: 400px;
+  padding: 14px 18px;
   border-radius: 999px;
   border: 1px solid #d4d4d4;
-  font-size: 0.95rem;
+  font-size: 1.05rem;
 }
 
 .search-button {
-  padding: 10px 16px;
+  padding: 14px 24px;
+  font-size: 1.05rem;
   border-radius: 999px;
   border: none;
   background: #f97316;
@@ -849,10 +927,23 @@ onBeforeUnmount(() => {
   border-top: 1px solid #e5e7eb;
 }
 
+.protection-uv-context {
+  font-size: 0.9rem;
+  color: #4b5563;
+  margin: 0 0 12px;
+}
+
 .protection-columns {
   display: flex;
   flex-wrap: wrap;
   gap: 16px;
+}
+
+.protection-divider {
+  width: 1px;
+  background: #e5e7eb;
+  align-self: stretch;
+  flex-shrink: 0;
 }
 
 .dosage-card,
@@ -866,11 +957,10 @@ onBeforeUnmount(() => {
   font-weight: 600;
 }
 
-.dosage-uv,
-.clothing-uv {
-  font-size: 0.9rem;
-  color: #4b5563;
-  margin-bottom: 6px;
+.dosage-emojis {
+  font-size: 1.5rem;
+  margin: 0 0 8px;
+  letter-spacing: 0.2em;
 }
 
 .dosage-box {
@@ -892,37 +982,45 @@ onBeforeUnmount(() => {
   color: #111827;
 }
 
+.clothing-emojis {
+  font-size: 1.5rem;
+  margin: 0 0 8px;
+  letter-spacing: 0.2em;
+}
+
 .clothing-text {
   font-size: 0.95rem;
 }
 
 .protection-reminder {
-  margin-top: 12px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #e5e7eb;
 }
 
 .reminder-label {
-  font-size: 0.9rem;
+  font-size: 1.1rem;
   font-weight: 600;
-  margin-bottom: 4px;
+  margin-bottom: 8px;
 }
 
 .reminder-controls {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 12px;
   align-items: center;
-  margin-top: 4px;
+  margin-top: 8px;
 }
 
 .reminder-button {
-  padding: 8px 14px;
+  padding: 10px 18px;
   border-radius: 999px;
   border: none;
   background: #22c55e;
   color: #fff;
   font-weight: 600;
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 1rem;
 }
 
 .reminder-button-off {
@@ -934,15 +1032,15 @@ onBeforeUnmount(() => {
 }
 
 .reminder-note {
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   color: #6b7280;
 }
 
 .reminder-test-mode {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 0.85rem;
+  gap: 8px;
+  font-size: 0.95rem;
   color: #4b5563;
   cursor: pointer;
 }
@@ -956,8 +1054,8 @@ onBeforeUnmount(() => {
 }
 
 .reminder-countdown {
-  margin-top: 8px;
-  font-size: 0.9rem;
+  margin-top: 12px;
+  font-size: 1.05rem;
   font-weight: 600;
   color: #f97316;
 }
@@ -1049,6 +1147,10 @@ onBeforeUnmount(() => {
 
   .protection-body {
     padding-inline: 14px;
+  }
+
+  .protection-divider {
+    display: none;
   }
 }
 </style>
