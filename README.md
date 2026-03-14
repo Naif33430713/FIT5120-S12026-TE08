@@ -248,39 +248,39 @@ The app expects at least five rows in `UVGuidance`, covering standard UV ranges.
 -- DELETE FROM "UVGuidance";
 
 INSERT INTO "UVGuidance"
-  (uv_min, uv_max, risk_level, human_alert_template,
+  (guidance_id, uv_min, uv_max, risk_level, human_alert_template,
    clothing_text, sunscreen_dosage_text, reapply_minutes)
 VALUES
   -- 0–2 Low
-  (0, 2, 'Low',
+  (1, 0, 2, 'Low',
    'Minimal risk. No protection required unless outside for extended periods or near reflective surfaces (snow/water).',
    'Normal clothing is usually sufficient. Consider covering up if you are outside for a long time, especially near water or snow.',
    'Sunscreen is generally not required for short exposure. Use SPF 50+ if you are outside for extended periods.',
    60),
 
   -- 3–5 Moderate
-  (3, 5, 'Moderate',
+  (2, 3, 5, 'Moderate',
    'Moderate risk. Seek shade, wear clothing, hat, and sunglasses, and apply SPF 50+ sunscreen.',
    'Wear long sleeves or a light overshirt, a broad‑brimmed hat and UV‑blocking sunglasses when outdoors.',
    'Apply SPF 50+ broad‑spectrum sunscreen to all exposed skin.',
    60),
 
   -- 6–7 High
-  (6, 7, 'High',
+  (3, 6, 7, 'High',
    'High risk. Same as moderate, but take extra care, especially between 10 am and 4 pm.',
    'Choose loose‑fitting, long‑sleeved tops and long shorts or pants, plus a wide‑brimmed hat and UV‑blocking sunglasses.',
    'Apply SPF 50+ generously and reapply regularly when outdoors.',
    45),
 
   -- 8–10 Very High
-  (8, 10, 'Very High',
+  (4, 8, 10, 'Very High',
    'Very high risk. Avoid sun between 10 am and 4 pm, use all protection measures.',
    'Maximise skin coverage with UPF‑rated clothing, long sleeves and pants, plus a broad‑brimmed hat and wrap‑around sunglasses.',
    'Apply SPF 50+ sunscreen and reapply frequently, especially if sweating or swimming.',
    30),
 
   -- 11+ Extreme
-  (11, 50, 'Extreme',
+  (5, 11, 50, 'Extreme',
    'Extreme risk. Take all precautions. Unprotected skin burns in minutes.',
    'Wear UPF 50+ clothing where possible, including long sleeves, long pants, a high‑coverage hat and UV‑blocking sunglasses. Avoid being outdoors in peak UV periods where you can.',
    'Apply SPF 50+ sunscreen often; even brief unprotected exposure can cause burns.',
