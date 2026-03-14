@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.env
+.env.*
+backend/cloudrun.env
+backend/generated/
+frontend/.firebase/
