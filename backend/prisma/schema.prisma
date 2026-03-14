@@ -7,28 +7,6 @@ datasource db {
    url      = env("DATABASE_URL")
 }
 
-model User {
-  user_id     Int      @id @default(autoincrement())
-  google_id   String   @unique
-  name        String
-  email       String   @unique
-  created_at  DateTime @default(now())
-
-  reminders   Reminder[]
-}
-
-model Reminder {
-  reminder_id       Int      @id @default(autoincrement())
-  user_id           Int
-  interval_minutes  Int
-  is_active         Boolean
-  next_trigger_time DateTime?
-  created_at        DateTime @default(now())
-  status            String?
-
-  user User @relation(fields: [user_id], references: [user_id])
-}
-
 model UVGuidance {
   guidance_id           Int     @id @default(autoincrement())
   uv_min                Float
