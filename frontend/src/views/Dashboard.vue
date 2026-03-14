@@ -1,6 +1,6 @@
 <script setup>
 
-import { ref, onMounted } from "vue"
+import { ref, onMounted, onBeforeUnmount } from "vue"
 import { RouterLink } from "vue-router"
 import api from "../services/api"
 
@@ -12,8 +12,13 @@ const city = ref("")
 const locationName = ref("")
 
 let reminderTimer = null
+let countdownTimer = null
 const reminderEnabled = ref(false)
 const showProtection = ref(false)
+const testMode = ref(false)
+const reminderFired = ref(false)
+const nextFireTime = ref(null)
+const countdownDisplay = ref("")
 const reminderIntervalMinutesKey = "sunscreenReminderIntervalMinutes"
 const reminderEnabledKey = "sunscreenReminderEnabled"
 
@@ -80,15 +85,36 @@ function getUvMessageStyle(uvIndex) {
 
 /*
 -------------------------------------
-BROWSER NOTIFICATIONS
+STOP REMINDER (shared cleanup)
 -------------------------------------
 */
 
-function enableNotifications() {
+function stopReminder() {
 
-  if (!("Notification" in window)) return
+  if (reminderTimer) {
 
-  Notification.requestPermission()
+    clearTimeout(reminderTimer)
+
+    reminderTimer = null
+
+  }
+
+  if (countdownTimer) {
+
+    clearInterval(countdownTimer)
+
+    countdownTimer = null
+
+  }
+
+  nextFireTime.value = null
+
+  countdownDisplay.value = ""
+
+  reminderEnabled.value = false
+
+  localStorage.removeItem(reminderEnabledKey)
+  localStorage.removeItem(reminderIntervalMinutesKey)
 
 }
 
@@ -102,25 +128,39 @@ function startReminder(minutes) {
 
   if (!minutes) return
 
-  const interval = minutes * 60000
+  const intervalMs = minutes * 60000
 
-  if (reminderTimer) {
+  stopReminder()
 
-    clearInterval(reminderTimer)
+  reminderEnabled.value = true
+
+  nextFireTime.value = Date.now() + intervalMs
+
+  function updateCountdown() {
+
+    if (!nextFireTime.value) return
+
+    const remaining = Math.max(0, Math.floor((nextFireTime.value - Date.now()) / 1000))
+
+    const m = Math.floor(remaining / 60)
+
+    const s = remaining % 60
+
+    countdownDisplay.value = `${m}:${String(s).padStart(2, "0")}`
 
   }
 
-  reminderTimer = setInterval(() => {
+  updateCountdown()
 
-    if ("Notification" in window && Notification.permission === "granted") {
+  countdownTimer = setInterval(updateCountdown, 1000)
 
-      new Notification("Sunscreen Reminder", {
-        body: "Time to reapply sunscreen ☀"
-      })
+  reminderTimer = setTimeout(() => {
 
-    }
+    reminderFired.value = true
 
-  }, interval)
+    stopReminder()
+
+  }, intervalMs)
 
 }
 
@@ -130,20 +170,27 @@ ENABLE REMINDER
 -------------------------------------
 */
 
-async function enableReminder() {
+function enableReminder() {
 
-  if (!uvData.value || !uvData.value.reapply_minutes) {
+  if (!uvData.value) {
 
     alert("UV guidance not available yet")
 
     return
   }
 
-  const interval = Number(uvData.value.reapply_minutes)
+  const interval = testMode.value ? 1 : Number(uvData.value.reapply_minutes || 0)
 
-  enableNotifications()
+  if (!interval) {
+
+    alert("UV guidance not available yet")
+
+    return
+  }
+
+  reminderFired.value = false
+
   startReminder(interval)
-  reminderEnabled.value = true
   localStorage.setItem(reminderEnabledKey, "true")
   localStorage.setItem(reminderIntervalMinutesKey, String(interval))
 
@@ -154,18 +201,11 @@ async function enableReminder() {
 DISABLE REMINDER
 -------------------------------------
 */
-async function disableReminder() {
+function disableReminder() {
 
-  if (reminderTimer) {
+  stopReminder()
 
-    clearInterval(reminderTimer)
-
-  }
-
-  reminderEnabled.value = false
-
-  localStorage.removeItem(reminderEnabledKey)
-  localStorage.removeItem(reminderIntervalMinutesKey)
+  reminderFired.value = false
 
 }
 
@@ -255,11 +295,17 @@ onMounted(async () => {
 
   if (enabled && storedInterval > 0) {
 
-    enableNotifications()
     startReminder(storedInterval)
-    reminderEnabled.value = true
 
   }
+
+})
+
+onBeforeUnmount(() => {
+
+  if (reminderTimer) clearTimeout(reminderTimer)
+
+  if (countdownTimer) clearInterval(countdownTimer)
 
 })
 
@@ -405,15 +451,38 @@ onMounted(async () => {
                 >
                   🔕 Turn off reminders
                 </button>
+                <label
+                  v-if="uvData.uv_index >= 3"
+                  class="reminder-test-mode"
+                >
+                  <input
+                    v-model="testMode"
+                    type="checkbox"
+                    :disabled="reminderEnabled"
+                  />
+                  Test mode (1 min)
+                </label>
                 <p v-if="uvData.uv_index < 3" class="reminder-note">
                   UV is low right now; reminders are not needed.
                 </p>
               </div>
+              <p v-if="reminderEnabled && countdownDisplay" class="reminder-countdown">
+                Next reminder in {{ countdownDisplay }}
+              </p>
             </div>
           </div>
         </section>
       </section>
     </main>
+
+    <div v-if="reminderFired" class="reminder-overlay" @click.self="reminderFired = false">
+      <div class="reminder-popup">
+        <span class="reminder-popup-icon">☀️</span>
+        <h2 class="reminder-popup-title">Sunscreen Reminder</h2>
+        <p class="reminder-popup-text">Time to reapply your sunscreen!</p>
+        <button class="reminder-popup-btn" @click="reminderFired = false">Got it</button>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -867,6 +936,97 @@ onMounted(async () => {
 .reminder-note {
   font-size: 0.85rem;
   color: #6b7280;
+}
+
+.reminder-test-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: #4b5563;
+  cursor: pointer;
+}
+
+.reminder-test-mode input {
+  cursor: pointer;
+}
+
+.reminder-test-mode input:disabled {
+  cursor: not-allowed;
+}
+
+.reminder-countdown {
+  margin-top: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #f97316;
+}
+
+.reminder-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  animation: fadeIn 0.2s ease;
+}
+
+.reminder-popup {
+  background: #fff;
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+  padding: 36px 40px;
+  text-align: center;
+  max-width: 360px;
+  width: 90%;
+  animation: popIn 0.25s ease;
+}
+
+.reminder-popup-icon {
+  font-size: 3rem;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.reminder-popup-title {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 8px;
+}
+
+.reminder-popup-text {
+  font-size: 0.98rem;
+  color: #4b5563;
+  margin: 0 0 20px;
+}
+
+.reminder-popup-btn {
+  padding: 10px 28px;
+  border-radius: 999px;
+  border: none;
+  background: #f97316;
+  color: #fff;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.reminder-popup-btn:hover {
+  background: #ea580c;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes popIn {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 @media (max-width: 600px) {
