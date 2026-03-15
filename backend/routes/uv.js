@@ -54,13 +54,21 @@ router.get("/", async (req, res) => {
       })
     }
 
-    res.json({
+    const w = weather.data
+    const payload = {
       uv_index: uvIndex,
       risk_level: guidance.risk_level,
       clothing: guidance.clothing_text,
       sunscreen: guidance.sunscreen_dosage_text,
       reapply_minutes: guidance.reapply_minutes
-    })
+    }
+    if (w.main != null && typeof w.main.temp === "number") payload.temperature = w.main.temp
+    if (w.sys != null && w.sys.sunrise != null) payload.sunrise = w.sys.sunrise
+    if (w.sys != null && w.sys.sunset != null) payload.sunset = w.sys.sunset
+    if (w.weather != null && w.weather[0] != null && w.weather[0].id != null) payload.weather_id = w.weather[0].id
+    if (typeof w.timezone === "number") payload.timezone = w.timezone
+
+    res.json(payload)
 
   } catch (error) {
     console.error("UV API ERROR:", error.message)

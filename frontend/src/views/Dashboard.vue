@@ -18,6 +18,7 @@ const reminderEnabled = ref(false)
 const showProtection = ref(false)
 const testMode = ref(false)
 const reminderFired = ref(false)
+const showEmptySearchPopup = ref(false)
 const nextFireTime = ref(null)
 const countdownDisplay = ref("")
 const reminderIntervalMinutesKey = "sunscreenReminderIntervalMinutes"
@@ -104,6 +105,32 @@ function getSunscreenEmojis(uvIndex) {
   if (value <= 10) return "🧴 ☀️ 💧 🛡️"
 
   return "🧴 ☀️ 💧 🛡️"
+}
+
+function getWeatherEmoji(weatherId) {
+  const id = Number(weatherId ?? 0)
+  if (id >= 200 && id < 300) return "⛈️"
+  if (id >= 300 && id < 400) return "🌧️"
+  if (id >= 500 && id < 600) return "🌧️"
+  if (id >= 600 && id < 700) return "❄️"
+  if (id >= 700 && id < 800) return "🌫️"
+  if (id === 800) return "☀️"
+  if (id === 801) return "🌤️"
+  if (id === 802) return "⛅"
+  if (id === 803 || id === 804) return "☁️"
+  return "☀️"
+}
+
+function formatLocalTime(unixSeconds, timezoneSeconds) {
+  if (unixSeconds == null || timezoneSeconds == null) return ""
+  // Local time of day at the location (seconds since midnight); avoid using Date so we don't use browser timezone
+  const localTotalSeconds = unixSeconds + timezoneSeconds
+  const secondsInDay = ((localTotalSeconds % 86400) + 86400) % 86400
+  const hours = Math.floor(secondsInDay / 3600)
+  const minutes = Math.floor((secondsInDay % 3600) / 60)
+  const ampm = hours >= 12 ? "pm" : "am"
+  const hour12 = hours % 12 || 12
+  return `${hour12}:${String(minutes).padStart(2, "0")} ${ampm}`
 }
 
 /*
@@ -278,19 +305,54 @@ function pickLocation(match) {
 }
 
 async function searchCity() {
-
-  if (!city.value) return
-
+  const trimmed = (city.value || "").trim()
+  if (!trimmed) {
+    showEmptySearchPopup.value = true
+    return
+  }
   loading.value = true
   error.value = null
   uvData.value = null
   geoMatches.value = []
 
+  const GEO_APPID = "f5cb1e66fd5a5900bd73dfd9c44705ea"
+
+  if (/^\d{4}$/.test(trimmed)) {
+
+    try {
+
+      const zipRes = await fetch(
+        `https://api.openweathermap.org/geo/1.0/zip?zip=${trimmed},AU&appid=${GEO_APPID}`
+      )
+      const zipData = await zipRes.json()
+
+      if (!zipRes.ok || zipData.cod === "404" || zipData.lat == null || zipData.lon == null) {
+
+        error.value = "Postcode not found in Australia"
+        loading.value = false
+        return
+
+      }
+
+      locationName.value = zipData.state ? `${zipData.name}, ${zipData.state}` : zipData.name
+      fetchUV(zipData.lat, zipData.lon)
+
+    } catch (err) {
+
+      error.value = "Postcode not found in Australia"
+      uvData.value = null
+      loading.value = false
+
+    }
+    return
+
+  }
+
   try {
 
-    const q = `${city.value.trim()},AU`
+    const q = `${trimmed},AU`
     const geo = await fetch(
-      `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(q)}&limit=5&appid=f5cb1e66fd5a5900bd73dfd9c44705ea`
+      `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(q)}&limit=5&appid=${GEO_APPID}`
     )
 
     const data = await geo.json()
@@ -448,7 +510,7 @@ onBeforeUnmount(() => {
         <input
           v-model="city"
           class="search-input"
-          placeholder="Search suburb (Australia)"
+          placeholder="Suburb or postcode (Australia)"
         />
         <button class="search-button" @click="searchCity">
           🔍 Search
@@ -472,6 +534,16 @@ onBeforeUnmount(() => {
       </div>
 
       <section v-if="uvData" class="uv-section">
+        <div
+          v-if="uvData.temperature != null || uvData.sunrise != null || uvData.sunset != null || uvData.weather_id != null"
+          class="weather-strip"
+        >
+          <span v-if="locationName" class="weather-strip-location">{{ locationName }}</span>
+          <span v-if="uvData.weather_id != null" class="weather-strip-emoji" aria-hidden="true">{{ getWeatherEmoji(uvData.weather_id) }}</span>
+          <span v-if="uvData.temperature != null" class="weather-strip-temp">{{ Math.round(uvData.temperature) }} °C</span>
+          <span v-if="uvData.sunrise != null && uvData.timezone != null" class="weather-strip-time">Sunrise {{ formatLocalTime(uvData.sunrise, uvData.timezone) }}</span>
+          <span v-if="uvData.sunset != null && uvData.timezone != null" class="weather-strip-time">Sunset {{ formatLocalTime(uvData.sunset, uvData.timezone) }}</span>
+        </div>
         <div class="uv-circle-wrapper">
           <div class="uv-circle" :style="{ borderColor: getUVColor(uvData.uv_index) }">
             <div class="uv-index">
@@ -576,6 +648,15 @@ onBeforeUnmount(() => {
         </section>
       </section>
     </main>
+
+    <div v-if="showEmptySearchPopup" class="reminder-overlay" @click.self="showEmptySearchPopup = false">
+      <div class="reminder-popup">
+        <span class="reminder-popup-icon">📍</span>
+        <h2 class="reminder-popup-title">Enter a location</h2>
+        <p class="reminder-popup-text">Please enter a suburb or postcode, then click Search.</p>
+        <button class="reminder-popup-btn" @click="showEmptySearchPopup = false">OK</button>
+      </div>
+    </div>
 
     <div v-if="reminderFired" class="reminder-overlay" @click.self="reminderFired = false">
       <div class="reminder-popup">
@@ -930,6 +1011,38 @@ onBeforeUnmount(() => {
   flex-direction: column;
   align-items: center;
   gap: 10px;
+}
+
+.weather-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 12px 20px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: rgba(255, 249, 240, 0.95);
+  border: 1px solid #e5e7eb;
+  font-size: 0.95rem;
+  color: #374151;
+}
+
+.weather-strip-location {
+  font-weight: 600;
+  color: #111827;
+}
+
+.weather-strip-emoji {
+  font-size: 1.5rem;
+}
+
+.weather-strip-temp {
+  font-weight: 700;
+  color: #111827;
+}
+
+.weather-strip-time {
+  color: #4b5563;
 }
 
 .uv-circle-wrapper {
