@@ -31,12 +31,15 @@ router.get("/", async (req, res) => {
     }
 
     const apiKey = process.env.OPENWEATHER_API_KEY
-    const weather = await axios.get(
-      `https://api.openweathermap.org/data/2.5/weather?lat=${latNum}&lon=${lonNum}&appid=${apiKey}&units=metric`
+    const oneCall = await axios.get(
+      `https://api.openweathermap.org/data/3.0/onecall?lat=${latNum}&lon=${lonNum}&appid=${apiKey}&units=metric&exclude=minutely,alerts`
     )
 
-    // fallback UV approximation (OpenWeather free plan limitation)
-    const rawUvIndex = weather.data.uvi || weather.data.clouds?.all / 10 || 5
+    const data = oneCall.data || {}
+    const current = data.current || {}
+    const timezoneOffset = typeof data.timezone_offset === "number" ? data.timezone_offset : null
+
+    const rawUvIndex = typeof current.uvi === "number" ? current.uvi : 0
     const uvIndex = Number(rawUvIndex)
     const uvBucket = Math.floor(uvIndex)
 
@@ -54,19 +57,37 @@ router.get("/", async (req, res) => {
       })
     }
 
-    const w = weather.data
+    // use OpenWeather's daily data for today
+    let peakUvIndex = null
+    let peakUvTime = null
+    let maxTemp = null
+
+    if (Array.isArray(data.daily) && data.daily[0]) {
+      if (typeof data.daily[0].uvi === "number") {
+        peakUvIndex = data.daily[0].uvi
+        // we intentionally do not set a specific time; frontend will just show the peak value
+      }
+      if (data.daily[0].temp && typeof data.daily[0].temp.max === "number") {
+        maxTemp = data.daily[0].temp.max
+      }
+    }
+
+    const w = current
     const payload = {
       uv_index: uvIndex,
       risk_level: guidance.risk_level,
       clothing: guidance.clothing_text,
       sunscreen: guidance.sunscreen_dosage_text,
-      reapply_minutes: guidance.reapply_minutes
+      reapply_minutes: 120
     }
-    if (w.main != null && typeof w.main.temp === "number") payload.temperature = w.main.temp
-    if (w.sys != null && w.sys.sunrise != null) payload.sunrise = w.sys.sunrise
-    if (w.sys != null && w.sys.sunset != null) payload.sunset = w.sys.sunset
+    if (peakUvIndex != null) payload.peak_uv_index = peakUvIndex
+    if (peakUvTime != null) payload.peak_uv_time = peakUvTime
+    if (typeof w.temp === "number") payload.temperature = w.temp
+    if (maxTemp != null) payload.max_temperature = maxTemp
+    if (w.sunrise != null) payload.sunrise = w.sunrise
+    if (w.sunset != null) payload.sunset = w.sunset
     if (w.weather != null && w.weather[0] != null && w.weather[0].id != null) payload.weather_id = w.weather[0].id
-    if (typeof w.timezone === "number") payload.timezone = w.timezone
+    if (timezoneOffset != null) payload.timezone = timezoneOffset
 
     res.json(payload)
 

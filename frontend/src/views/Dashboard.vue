@@ -133,6 +133,40 @@ function formatLocalTime(unixSeconds, timezoneSeconds) {
   return `${hour12}:${String(minutes).padStart(2, "0")} ${ampm}`
 }
 
+function getCurrentUvLabel(uvIndex, riskLevel) {
+  if (uvIndex == null || !riskLevel) {
+    return "Current UV index information is not available"
+  }
+  return `Current UV index is:   ${riskLevel} Risk`
+}
+
+function formatLocalDate(timezoneSeconds) {
+  if (timezoneSeconds == null) return ""
+  const nowUtcSeconds = Math.floor(Date.now() / 1000)
+  const localDate = new Date((nowUtcSeconds + timezoneSeconds) * 1000)
+  return localDate.toLocaleDateString("en-AU", {
+    day: "numeric",
+    month: "short",
+    year: "numeric"
+  })
+}
+
+/*
+-------------------------------------
+RESET DASHBOARD STATE
+-------------------------------------
+*/
+
+function resetDashboard() {
+  city.value = ""
+  locationName.value = ""
+  geoMatches.value = []
+  uvData.value = null
+  error.value = null
+  loading.value = false
+  showProtection.value = false
+}
+
 /*
 -------------------------------------
 STOP REMINDER (shared cleanup)
@@ -222,21 +256,7 @@ ENABLE REMINDER
 
 function enableReminder() {
 
-  if (!uvData.value) {
-
-    alert("UV guidance not available yet")
-
-    return
-  }
-
-  const interval = testMode.value ? 1 : Number(uvData.value.reapply_minutes || 0)
-
-  if (!interval) {
-
-    alert("UV guidance not available yet")
-
-    return
-  }
+  const interval = testMode.value ? 1 : 120
 
   reminderFired.value = false
 
@@ -466,7 +486,11 @@ onBeforeUnmount(() => {
         <span class="app-logo-text">SunShield</span>
       </div>
       <nav class="app-nav">
-        <RouterLink to="/" class="app-nav-link app-nav-link--active">
+        <RouterLink
+          to="/"
+          class="app-nav-link app-nav-link--active"
+          @click="resetDashboard"
+        >
           Dashboard
         </RouterLink>
         <RouterLink to="/about" class="app-nav-link">
@@ -502,6 +526,45 @@ onBeforeUnmount(() => {
             <span class="hero-emoji">☀️</span>
             <p class="hero-emoji-label">SunShield</p>
             <p class="hero-emoji-meta">Stay sun safe today</p>
+            <p class="hero-reminder-question">Want to track your re‑application?</p>
+            <div class="hero-reminder-control">
+              <div class="hero-reminder-text">
+                <span class="hero-reminder-status">
+                  Sunscreen reminder
+                  {{ reminderEnabled ? "On" : "Off" }}
+                </span>
+                <span
+                  v-if="reminderEnabled && countdownDisplay"
+                  class="hero-reminder-countdown"
+                >
+                  · next in {{ countdownDisplay }}
+                </span>
+              </div>
+              <div class="hero-reminder-actions">
+                <button
+                  v-if="!reminderEnabled"
+                  class="hero-reminder-button"
+                  @click="enableReminder"
+                >
+                  🔔 Turn on
+                </button>
+                <button
+                  v-else
+                  class="hero-reminder-button hero-reminder-button-off"
+                  @click="disableReminder"
+                >
+                  🔕 Turn off
+                </button>
+                <label class="hero-reminder-test-mode">
+                  <input
+                    v-model="testMode"
+                    type="checkbox"
+                    :disabled="reminderEnabled"
+                  />
+                  Test mode (1 min)
+                </label>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -516,6 +579,7 @@ onBeforeUnmount(() => {
           🔍 Search
         </button>
       </section>
+
 
       <p v-if="error" class="search-error">{{ error }}</p>
 
@@ -535,12 +599,20 @@ onBeforeUnmount(() => {
 
       <section v-if="uvData" class="uv-section">
         <div
-          v-if="uvData.temperature != null || uvData.sunrise != null || uvData.sunset != null || uvData.weather_id != null"
+          v-if="uvData.max_temperature != null || uvData.sunrise != null || uvData.sunset != null || uvData.weather_id != null"
           class="weather-strip"
         >
           <span v-if="locationName" class="weather-strip-location">{{ locationName }}</span>
+          <span
+            v-if="uvData.timezone != null"
+            class="weather-strip-date"
+          >
+            {{ formatLocalDate(uvData.timezone) }}
+          </span>
           <span v-if="uvData.weather_id != null" class="weather-strip-emoji" aria-hidden="true">{{ getWeatherEmoji(uvData.weather_id) }}</span>
-          <span v-if="uvData.temperature != null" class="weather-strip-temp">{{ Math.round(uvData.temperature) }} °C</span>
+          <span v-if="uvData.max_temperature != null" class="weather-strip-temp">
+            {{ Math.round(uvData.max_temperature) }} °C
+          </span>
           <span v-if="uvData.sunrise != null && uvData.timezone != null" class="weather-strip-time">Sunrise {{ formatLocalTime(uvData.sunrise, uvData.timezone) }}</span>
           <span v-if="uvData.sunset != null && uvData.timezone != null" class="weather-strip-time">Sunset {{ formatLocalTime(uvData.sunset, uvData.timezone) }}</span>
         </div>
@@ -557,7 +629,8 @@ onBeforeUnmount(() => {
 
         <div class="uv-risk-banner" :style="{ backgroundColor: getUVColor(uvData.uv_index) }">
           <span class="uv-risk-text">
-            {{ uvData.risk_level }} Risk
+            <span>Current UV index is:</span>
+            <span class="uv-risk-level-text">{{ uvData.risk_level }} Risk</span>
           </span>
         </div>
 
@@ -581,6 +654,13 @@ onBeforeUnmount(() => {
           <div v-if="showProtection" class="protection-body">
             <p class="protection-uv-context">
               Current UV Index {{ uvData.uv_index }} ({{ uvData.risk_level }})
+            </p>
+            <p
+              v-if="uvData.peak_uv_index != null && uvData.peak_uv_index > 0 && uvData.timezone != null"
+              class="protection-uv-context"
+            >
+              Today&apos;s peak UV for {{ formatLocalDate(uvData.timezone) }} is
+              {{ uvData.peak_uv_index.toFixed(1) }} – make sure you slip, slop, slap if you&apos;re heading out ☀️
             </p>
             <div class="protection-columns">
               <div class="dosage-card">
@@ -612,7 +692,7 @@ onBeforeUnmount(() => {
               <p class="reminder-label">Sunscreen Reminders</p>
               <div class="reminder-controls">
                 <button
-                  v-if="!reminderEnabled && uvData.uv_index >= 3"
+                  v-if="!reminderEnabled"
                   class="reminder-button"
                   @click="enableReminder"
                 >
@@ -626,7 +706,6 @@ onBeforeUnmount(() => {
                   🔕 Turn off reminders
                 </button>
                 <label
-                  v-if="uvData.uv_index >= 3"
                   class="reminder-test-mode"
                 >
                   <input
@@ -636,9 +715,6 @@ onBeforeUnmount(() => {
                   />
                   Test mode (1 min)
                 </label>
-                <p v-if="uvData.uv_index < 3" class="reminder-note">
-                  UV is low right now; reminders are not needed.
-                </p>
               </div>
               <p v-if="reminderEnabled && countdownDisplay" class="reminder-countdown">
                 Next reminder in {{ countdownDisplay }}
@@ -864,11 +940,11 @@ onBeforeUnmount(() => {
 }
 
 .hero-emoji-card {
-  width: 260px;
+  width: 320px;
   border-radius: 24px;
   background: rgba(255, 249, 240, 0.95);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.12);
-  padding: 24px 20px;
+  padding: 28px 24px;
   text-align: center;
 }
 
@@ -886,6 +962,72 @@ onBeforeUnmount(() => {
 .hero-emoji-meta {
   font-size: 0.85rem;
   color: #6b7280;
+}
+
+.hero-reminder-question {
+  margin-top: 16px;
+  font-size: 0.9rem;
+  color: #4b5563;
+}
+
+.hero-reminder-control {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 18px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+}
+
+.hero-reminder-status {
+  font-size: 0.8rem;
+  color: #4b5563;
+}
+
+.hero-reminder-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.hero-reminder-countdown {
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.hero-reminder-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hero-reminder-button {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: none;
+  background: #22c55e;
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.hero-reminder-button-off {
+  background: #9ca3af;
+}
+
+.hero-reminder-button:hover {
+  opacity: 0.9;
+}
+
+.hero-reminder-test-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8rem;
+  color: #4b5563;
 }
 
 .search-bar {
@@ -1023,7 +1165,7 @@ onBeforeUnmount(() => {
   border-radius: 12px;
   background: rgba(255, 249, 240, 0.95);
   border: 1px solid #e5e7eb;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   color: #374151;
 }
 
@@ -1032,12 +1174,17 @@ onBeforeUnmount(() => {
   color: #111827;
 }
 
+.weather-strip-date {
+  font-size: 0.85rem;
+  color:rgb(12, 12, 12);
+}
+
 .weather-strip-emoji {
   font-size: 1.5rem;
 }
 
 .weather-strip-temp {
-  font-weight: 700;
+  font-weight: 600;
   color: #111827;
 }
 
@@ -1080,6 +1227,7 @@ onBeforeUnmount(() => {
   max-width: 360px;
   padding: 10px 16px;
   border-radius: 999px;
+  margin-top: 10px;
   text-align: center;
   color: #fff;
   font-weight: 700;
@@ -1088,6 +1236,13 @@ onBeforeUnmount(() => {
 
 .uv-risk-text {
   font-size: 0.98rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.uv-risk-level-text {
+  font-weight: 700;
 }
 
 .uv-message-box {
