@@ -10,6 +10,7 @@ const loading = ref(false)
 
 const city = ref("")
 const locationName = ref("")
+const geoMatches = ref([])
 
 let reminderTimer = null
 let countdownTimer = null
@@ -251,7 +252,10 @@ async function fetchUV(lat, lon) {
   } catch (err) {
 
     console.error(err)
-    error.value = "Failed to fetch UV data"
+    uvData.value = null
+    error.value = err.response?.status === 400 && err.response?.data?.error
+      ? err.response.data.error
+      : "Failed to fetch UV data"
 
   }
 
@@ -265,42 +269,83 @@ SEARCH CITY
 -------------------------------------
 */
 
+function pickLocation(match) {
+
+  geoMatches.value = []
+  locationName.value = match.state ? `${match.name}, ${match.state}` : match.name
+  fetchUV(match.lat, match.lon)
+
+}
+
 async function searchCity() {
 
   if (!city.value) return
 
   loading.value = true
+  error.value = null
+  uvData.value = null
+  geoMatches.value = []
 
   try {
 
+    const q = `${city.value.trim()},AU`
     const geo = await fetch(
-      `https://api.openweathermap.org/geo/1.0/direct?q=${city.value}&limit=1&appid=f5cb1e66fd5a5900bd73dfd9c44705ea`
+      `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(q)}&limit=5&appid=f5cb1e66fd5a5900bd73dfd9c44705ea`
     )
 
     const data = await geo.json()
 
-    if (!data.length) {
+    const auOnly = Array.isArray(data) ? data.filter((r) => r.country === "AU") : []
 
-      error.value = "City not found"
+    if (auOnly.length === 0) {
+
+      error.value = "City not found in Australia"
       loading.value = false
       return
 
     }
 
-    const lat = data[0].lat
-    const lon = data[0].lon
+    const getLabel = (r) => (r.state ? `${r.name}, ${r.state}` : r.name)
+    const coordKey = (r) => `${Math.round(Number(r.lat) * 10) / 10}_${Math.round(Number(r.lon) * 10) / 10}`
+    const seenByCoord = new Map()
+    for (const r of auOnly) {
+      const key = coordKey(r)
+      const label = getLabel(r)
+      const existing = seenByCoord.get(key)
+      if (!existing || label.length < getLabel(existing).length) {
+        seenByCoord.set(key, r)
+      }
+    }
+    let deduped = [...seenByCoord.values()]
+    const seenByLabel = new Map()
+    for (const r of deduped) {
+      const label = getLabel(r)
+      if (!seenByLabel.has(label)) {
+        seenByLabel.set(label, r)
+      }
+    }
+    deduped = [...seenByLabel.values()]
 
-    locationName.value = data[0].name
+    if (deduped.length === 1) {
 
-    fetchUV(lat, lon)
+      locationName.value = deduped[0].state ? `${deduped[0].name}, ${deduped[0].state}` : deduped[0].name
+      fetchUV(deduped[0].lat, deduped[0].lon)
+
+    } else {
+
+      geoMatches.value = deduped
+      loading.value = false
+
+    }
 
   } catch (err) {
 
     error.value = "City lookup failed"
+    uvData.value = null
 
   }
 
-  loading.value = false
+  if (geoMatches.value.length <= 1) loading.value = false
 
 }
 
@@ -403,12 +448,28 @@ onBeforeUnmount(() => {
         <input
           v-model="city"
           class="search-input"
-          placeholder="Search your Suburb"
+          placeholder="Search suburb (Australia)"
         />
         <button class="search-button" @click="searchCity">
           🔍 Search
         </button>
       </section>
+
+      <p v-if="error" class="search-error">{{ error }}</p>
+
+      <div v-if="geoMatches.length > 1" class="geo-picker">
+        <p class="geo-picker-label">Multiple matches – choose one:</p>
+        <div class="geo-picker-buttons">
+          <button
+            v-for="(match, i) in geoMatches"
+            :key="i"
+            class="geo-picker-btn"
+            @click="pickLocation(match)"
+          >
+            {{ match.state ? `${match.name}, ${match.state}` : match.name }}
+          </button>
+        </div>
+      </div>
 
       <section v-if="uvData" class="uv-section">
         <div class="uv-circle-wrapper">
@@ -795,6 +856,51 @@ onBeforeUnmount(() => {
 
 .search-button:hover {
   background: #ea580c;
+}
+
+.search-error {
+  text-align: center;
+  margin: 8px auto 0;
+  max-width: 560px;
+  font-size: 0.95rem;
+  color: #b91c1c;
+}
+
+.geo-picker {
+  max-width: 560px;
+  margin: 12px auto 0;
+  padding: 12px 16px;
+  background: rgba(255, 249, 240, 0.95);
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+}
+
+.geo-picker-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin: 0 0 8px;
+  color: #374151;
+}
+
+.geo-picker-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.geo-picker-btn {
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid #f97316;
+  background: #fff;
+  color: #f97316;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.geo-picker-btn:hover {
+  background: #fff7ed;
 }
 
 .status-messages {

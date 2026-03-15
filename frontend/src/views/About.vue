@@ -64,6 +64,22 @@ import { RouterLink } from "vue-router"
         </div>
       </div>
 
+      <div class="about-legal">
+      <div class="about-section">
+        <h2>Privacy Statement</h2>
+        <p>
+          SunShield collects limited personal information such as your email, username, location, and reminder settings so we can provide personalised UV updates, sunscreen reminders, and clothing recommendations. We only use this information to run and improve the website. We do not sell your data, and we take reasonable steps to keep it secure.
+        </p>
+      </div>
+
+      <div class="about-section">
+        <h2>Terms of Use</h2>
+        <p>
+          SunShield provides general sun-safety information for awareness and personal use. It is not medical advice. By using the website, you agree to use it responsibly and understand that some features depend on accurate location and account information.
+        </p>
+      </div>
+      </div>
+
       <div class="about-actions">
         <RouterLink to="/" class="about-back">
           ← Back to dashboard
@@ -111,6 +127,18 @@ import { RouterLink } from "vue-router"
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.1fr);
   column-gap: 32px;
   row-gap: 20px;
+}
+
+.about-legal {
+  margin-top: 24px;
+}
+
+.about-legal .about-section {
+  margin-bottom: 16px;
+}
+
+.about-legal .about-section:last-child {
+  margin-bottom: 0;
 }
 
 .about-section h2 {
