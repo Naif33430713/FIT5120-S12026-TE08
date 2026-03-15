@@ -14,9 +14,25 @@ router.get("/", async (req, res) => {
       return res.status(400).json({ error: "Latitude and longitude required" })
     }
 
+    const latNum = Number(lat)
+    const lonNum = Number(lon)
+
+    if (Number.isNaN(latNum) || Number.isNaN(lonNum)) {
+      return res.status(400).json({ error: "Invalid coordinates" })
+    }
+
+    const AUS_LAT_MIN = -44
+    const AUS_LAT_MAX = -10
+    const AUS_LON_MIN = 113
+    const AUS_LON_MAX = 154
+
+    if (latNum < AUS_LAT_MIN || latNum > AUS_LAT_MAX || lonNum < AUS_LON_MIN || lonNum > AUS_LON_MAX) {
+      return res.status(400).json({ error: "Location must be within Australia" })
+    }
+
     const apiKey = process.env.OPENWEATHER_API_KEY
     const weather = await axios.get(
-      `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${apiKey}&units=metric`
+      `https://api.openweathermap.org/data/2.5/weather?lat=${latNum}&lon=${lonNum}&appid=${apiKey}&units=metric`
     )
 
     // fallback UV approximation (OpenWeather free plan limitation)
