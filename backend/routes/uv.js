@@ -41,23 +41,16 @@ router.get("/", async (req, res) => {
 
     const rawUvIndex = typeof current.uvi === "number" ? current.uvi : 0
     const uvIndex = Number(rawUvIndex)
-    const uvBucket = Math.floor(uvIndex)
 
     const guidance = await prisma.uVGuidance.findFirst({
       where: {
-        uv_min: { lte: uvBucket },
-        uv_max: { gte: uvBucket }
+        uv_min: { lte: uvIndex },
+        uv_max: { gte: uvIndex }
       }
     })
 
-    if (!guidance) {
-      return res.json({
-        uv_index: uvIndex,
-        message: "No UV guidance rule found"
-      })
-    }
 
-    // use OpenWeather's daily data for today
+    // use OpenWeather's daily + hourly data for today
     let peakUvIndex = null
     let peakUvTime = null
     let maxTemp = null
@@ -65,10 +58,24 @@ router.get("/", async (req, res) => {
     if (Array.isArray(data.daily) && data.daily[0]) {
       if (typeof data.daily[0].uvi === "number") {
         peakUvIndex = data.daily[0].uvi
-        // we intentionally do not set a specific time; frontend will just show the peak value
       }
       if (data.daily[0].temp && typeof data.daily[0].temp.max === "number") {
         maxTemp = data.daily[0].temp.max
+      }
+    }
+
+    // approximate time of peak UV using the first 24 hours of hourly data
+    if (Array.isArray(data.hourly) && data.hourly.length > 0) {
+      let best = null
+      for (let i = 0; i < data.hourly.length && i < 24; i++) {
+        const h = data.hourly[i]
+        if (typeof h.uvi !== "number" || typeof h.dt !== "number") continue
+        if (!best || h.uvi > best.uvi) {
+          best = { uvi: h.uvi, dt: h.dt }
+        }
+      }
+      if (best && typeof best.dt === "number") {
+        peakUvTime = best.dt
       }
     }
 
@@ -80,8 +87,34 @@ router.get("/", async (req, res) => {
       sunscreen: guidance.sunscreen_dosage_text,
       reapply_minutes: 120
     }
-    if (peakUvIndex != null) payload.peak_uv_index = peakUvIndex
+    if (peakUvIndex != null) {
+      payload.peak_uv_index = peakUvIndex
+      // derive a qualitative label for peak UV, similar to frontend buckets
+      if (peakUvIndex <= 2) payload.peak_uv_label = "Low"
+      else if (peakUvIndex <= 5) payload.peak_uv_label = "Moderate"
+      else if (peakUvIndex <= 7) payload.peak_uv_label = "High"
+      else if (peakUvIndex <= 10) payload.peak_uv_label = "Very High"
+      else payload.peak_uv_label = "Extreme"
+    }
     if (peakUvTime != null) payload.peak_uv_time = peakUvTime
+
+    // 5-day forecast from daily data (days 0-4)
+    if (Array.isArray(data.daily) && data.daily.length > 0) {
+      payload.forecast = data.daily.slice(0, 5).map((day) => {
+        const entry = { dt: day.dt }
+        if (day.weather && day.weather[0] && day.weather[0].id != null) {
+          entry.weather_id = day.weather[0].id
+        }
+        if (day.temp && typeof day.temp.max === "number") {
+          entry.max_temp = day.temp.max
+        }
+        if (typeof day.uvi === "number") {
+          entry.uvi = day.uvi
+        }
+        return entry
+      })
+    }
+
     if (typeof w.temp === "number") payload.temperature = w.temp
     if (maxTemp != null) payload.max_temperature = maxTemp
     if (w.sunrise != null) payload.sunrise = w.sunrise

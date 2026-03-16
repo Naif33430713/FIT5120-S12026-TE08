@@ -64,6 +64,74 @@ import { RouterLink } from "vue-router"
         </div>
       </div>
 
+      <div class="about-sources">
+        <h2>Data &amp; research sources</h2>
+        <p class="sources-intro">
+          SunShield combines live environmental data with evidence‑based health guidance.
+          Below are the sources we rely on.
+        </p>
+        <div class="sources-grid">
+          <div class="source-item">
+            <span class="source-icon">🌤️</span>
+            <div>
+              <strong>OpenWeatherMap – One Call API 3.0</strong>
+              <p>
+                Provides the live UV index, hourly forecast data (used to find today's peak UV hour),
+                daily 5‑day forecast (weather conditions, max temperature, daily UV index),
+                and sunrise/sunset times.
+                <a href="https://openweathermap.org/api/one-call-3" target="_blank" rel="noopener">openweathermap.org</a>
+              </p>
+            </div>
+          </div>
+          <div class="source-item">
+            <span class="source-icon">📍</span>
+            <div>
+              <strong>Nominatim / OpenStreetMap Geocoding</strong>
+              <p>
+                Powers the location search typeahead, translating suburb, city, or postcode
+                text into geographic coordinates. Results are filtered to Australia.
+                <a href="https://nominatim.openstreetmap.org/" target="_blank" rel="noopener">nominatim.openstreetmap.org</a>
+              </p>
+            </div>
+          </div>
+          <div class="source-item">
+            <span class="source-icon">🗺️</span>
+            <div>
+              <strong>OpenStreetMap map tiles (via Leaflet)</strong>
+              <p>
+                The interactive map on the dashboard is rendered using OpenStreetMap tile imagery
+                and the Leaflet mapping library.
+                <a href="https://www.openstreetmap.org/" target="_blank" rel="noopener">openstreetmap.org</a>
+              </p>
+            </div>
+          </div>
+          <div class="source-item">
+            <span class="source-icon">🎗️</span>
+            <div>
+              <strong>Cancer Council Australia – SunSmart</strong>
+              <p>
+                All sunscreen dosage recommendations (SPF 50+, application amounts, re‑application
+                intervals), clothing advice, and the "five ways to be SunSmart" framework are
+                derived from Cancer Council Australia's SunSmart guidelines.
+                <a href="https://www.cancer.org.au/cancer-information/causes-and-prevention/sun-safety" target="_blank" rel="noopener">cancer.org.au – Sun Safety</a>
+              </p>
+            </div>
+          </div>
+          <div class="source-item">
+            <span class="source-icon">🌍</span>
+            <div>
+              <strong>WHO UV Index Classification</strong>
+              <p>
+                The UV risk categories (Low, Moderate, High, Very High, Extreme) and their
+                numeric thresholds are based on the World Health Organization's international
+                UV Index standard.
+                <a href="https://www.who.int/news-room/questions-and-answers/item/radiation-the-ultraviolet-(uv)-index" target="_blank" rel="noopener">who.int – UV Index</a>
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="about-legal">
       <div class="about-section">
         <h2>Privacy Statement</h2>
@@ -127,6 +195,74 @@ import { RouterLink } from "vue-router"
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.1fr);
   column-gap: 32px;
   row-gap: 20px;
+}
+
+.about-sources {
+  margin-top: 28px;
+  padding: 20px 24px;
+  background: rgba(255, 237, 160, 0.35);
+  border-radius: 16px;
+  border: 1px solid rgba(249, 115, 22, 0.15);
+}
+
+.about-sources h2 {
+  font-size: 1.1rem;
+  margin: 0 0 6px;
+  color: #111827;
+}
+
+.sources-intro {
+  font-size: 0.92rem;
+  color: #6b7280;
+  margin: 0 0 16px;
+  line-height: 1.5;
+}
+
+.sources-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.source-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.source-icon {
+  font-size: 1.4rem;
+  line-height: 1;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.source-item > div {
+  flex: 1;
+}
+
+.source-item strong {
+  display: block;
+  font-size: 0.95rem;
+  color: #111827;
+  margin-bottom: 2px;
+}
+
+.source-item p {
+  font-size: 0.88rem;
+  color: #4b5563;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.source-item a {
+  color: #f97316;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.source-item a:hover {
+  text-decoration: underline;
 }
 
 .about-legal {
