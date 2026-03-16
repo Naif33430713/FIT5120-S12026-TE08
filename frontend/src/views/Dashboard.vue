@@ -19,10 +19,13 @@ const showProtection = ref(false)
 const testMode = ref(false)
 const reminderFired = ref(false)
 const showEmptySearchPopup = ref(false)
+const showSuccessPopup = ref(false)
 const nextFireTime = ref(null)
 const countdownDisplay = ref("")
 const reminderIntervalMinutesKey = "sunscreenReminderIntervalMinutes"
 const reminderEnabledKey = "sunscreenReminderEnabled"
+
+let successPopupTimer = null
 
 /*
 -------------------------------------
@@ -165,6 +168,12 @@ function resetDashboard() {
   error.value = null
   loading.value = false
   showProtection.value = false
+  showSuccessPopup.value = false
+
+  if (successPopupTimer) {
+    clearTimeout(successPopupTimer)
+    successPopupTimer = null
+  }
 }
 
 /*
@@ -295,6 +304,18 @@ async function fetchUV(lat, lon) {
     const res = await api.get(`/api/uv?lat=${lat}&lon=${lon}`)
 
     uvData.value = res.data
+
+    if (successPopupTimer) {
+      clearTimeout(successPopupTimer)
+      successPopupTimer = null
+    }
+
+    showSuccessPopup.value = true
+
+    successPopupTimer = setTimeout(() => {
+      showSuccessPopup.value = false
+      successPopupTimer = null
+    }, 1250)
 
   } catch (err) {
 
@@ -455,6 +476,11 @@ onBeforeUnmount(() => {
   if (reminderTimer) clearTimeout(reminderTimer)
 
   if (countdownTimer) clearInterval(countdownTimer)
+
+  if (successPopupTimer) {
+    clearTimeout(successPopupTimer)
+    successPopupTimer = null
+  }
 
 })
 
@@ -724,6 +750,26 @@ onBeforeUnmount(() => {
         </section>
       </section>
     </main>
+
+    <div
+      v-if="showSuccessPopup"
+      class="reminder-overlay"
+      @click.self="showSuccessPopup = false"
+    >
+      <div class="reminder-popup">
+        <span class="reminder-popup-icon">✅</span>
+        <h2 class="reminder-popup-title">Location loaded</h2>
+        <p class="reminder-popup-text">
+          Loaded data for {{ locationName || "your location" }}.
+        </p>
+        <button
+          class="reminder-popup-btn"
+          @click="showSuccessPopup = false"
+        >
+          OK
+        </button>
+      </div>
+    </div>
 
     <div v-if="showEmptySearchPopup" class="reminder-overlay" @click.self="showEmptySearchPopup = false">
       <div class="reminder-popup">

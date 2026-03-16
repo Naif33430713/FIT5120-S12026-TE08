@@ -41,21 +41,14 @@ router.get("/", async (req, res) => {
 
     const rawUvIndex = typeof current.uvi === "number" ? current.uvi : 0
     const uvIndex = Number(rawUvIndex)
-    const uvBucket = Math.floor(uvIndex)
 
     const guidance = await prisma.uVGuidance.findFirst({
       where: {
-        uv_min: { lte: uvBucket },
-        uv_max: { gte: uvBucket }
+        uv_min: { lte: uvIndex },
+        uv_max: { gte: uvIndex }
       }
     })
 
-    if (!guidance) {
-      return res.json({
-        uv_index: uvIndex,
-        message: "No UV guidance rule found"
-      })
-    }
 
     // use OpenWeather's daily data for today
     let peakUvIndex = null
