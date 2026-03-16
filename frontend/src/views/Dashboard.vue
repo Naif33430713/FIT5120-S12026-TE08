@@ -91,23 +91,23 @@ function getUvMessageStyle(uvIndex) {
 function getClothingEmojis(uvIndex) {
   const value = Number(uvIndex ?? 0)
 
-  if (value <= 2) return "👒 🕶️"
+  if (value <= 2) return "👒"
   if (value <= 5) return "👒 🕶️ 👕"
-  if (value <= 7) return "👒 🕶️ 👕 👖 ⛱️"
-  if (value <= 10) return "👒 🕶️ 👕 👖 ⛱️ ☀️"
+  if (value <= 7) return "👒 🕶️ 👕 🧥"
+  if (value <= 10) return "👒 🕶️ 👕 🧥 ⛱️"
 
-  return "☀️ 👒 🕶️ 👕 👖 ⛱️"
+  return "👒 🕶️ 👕 🧥 ⛱️ 🏠"
 }
 
 function getSunscreenEmojis(uvIndex) {
   const value = Number(uvIndex ?? 0)
 
   if (value <= 2) return "🧴"
-  if (value <= 5) return "🧴 ☀️"
-  if (value <= 7) return "🧴 ☀️ 💧"
-  if (value <= 10) return "🧴 ☀️ 💧 🛡️"
+  if (value <= 5) return "🧴 ✅"
+  if (value <= 7) return "🧴 ✅ 🔁"
+  if (value <= 10) return "🧴 ✅ 🔁 ⚠️"
 
-  return "🧴 ☀️ 💧 🛡️"
+  return "🧴 ✅ 🔁 ⚠️ 🚨"
 }
 
 function getWeatherEmoji(weatherId) {
@@ -152,6 +152,20 @@ function formatLocalDate(timezoneSeconds) {
     month: "short",
     year: "numeric"
   })
+}
+
+function formatForecastDay(dtUnix, timezoneSeconds) {
+  if (dtUnix == null || timezoneSeconds == null) return ""
+  const nowUtcSeconds = Math.floor(Date.now() / 1000)
+  const localNow = new Date((nowUtcSeconds + timezoneSeconds) * 1000)
+  const localDay = new Date((dtUnix + timezoneSeconds) * 1000)
+  const todayDate = localNow.toISOString().slice(0, 10)
+  const dayDate = localDay.toISOString().slice(0, 10)
+  if (dayDate === todayDate) return "Today"
+  const tomorrowUtc = new Date((nowUtcSeconds + timezoneSeconds + 86400) * 1000)
+  const tomorrowDate = tomorrowUtc.toISOString().slice(0, 10)
+  if (dayDate === tomorrowDate) return "Tomorrow"
+  return localDay.toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short" })
 }
 
 /*
@@ -642,6 +656,26 @@ onBeforeUnmount(() => {
           <span v-if="uvData.sunrise != null && uvData.timezone != null" class="weather-strip-time">Sunrise {{ formatLocalTime(uvData.sunrise, uvData.timezone) }}</span>
           <span v-if="uvData.sunset != null && uvData.timezone != null" class="weather-strip-time">Sunset {{ formatLocalTime(uvData.sunset, uvData.timezone) }}</span>
         </div>
+
+        <div v-if="uvData.forecast && uvData.forecast.length" class="forecast-strip">
+          <div
+            v-for="(day, i) in uvData.forecast"
+            :key="i"
+            class="forecast-day"
+          >
+            <p class="forecast-day-label">{{ formatForecastDay(day.dt, uvData.timezone) }}</p>
+            <p class="forecast-day-emoji" aria-hidden="true">{{ getWeatherEmoji(day.weather_id) }}</p>
+            <p v-if="day.max_temp != null" class="forecast-day-temp">{{ Math.round(day.max_temp) }}°C</p>
+            <p
+              v-if="day.uvi != null"
+              class="forecast-day-uv"
+              :style="{ color: getUVColor(day.uvi) }"
+            >
+              UV {{ day.uvi.toFixed(0) }}
+            </p>
+          </div>
+        </div>
+
         <div class="uv-circle-wrapper">
           <div class="uv-circle" :style="{ borderColor: getUVColor(uvData.uv_index) }">
             <div class="uv-index">
@@ -678,16 +712,32 @@ onBeforeUnmount(() => {
           </button>
 
           <div v-if="showProtection" class="protection-body">
-            <p class="protection-uv-context">
-              Current UV Index {{ uvData.uv_index }} ({{ uvData.risk_level }})
-            </p>
-            <p
-              v-if="uvData.peak_uv_index != null && uvData.peak_uv_index > 0 && uvData.timezone != null"
-              class="protection-uv-context"
-            >
-              Today&apos;s peak UV for {{ formatLocalDate(uvData.timezone) }} is
-              {{ uvData.peak_uv_index.toFixed(1) }} – make sure you slip, slop, slap if you&apos;re heading out ☀️
-            </p>
+            <div class="protection-uv-stats">
+              <div class="protection-uv-stat">
+                <p class="protection-uv-stat-label">Current UV Index</p>
+                <p class="protection-uv-stat-value" :style="{ color: getUVColor(uvData.uv_index) }">
+                  {{ uvData.uv_index }}
+                  <span class="protection-uv-stat-sub">({{ uvData.risk_level }})</span>
+                </p>
+              </div>
+              <div
+                v-if="uvData.peak_uv_index != null && uvData.peak_uv_index > 0"
+                class="protection-uv-stat"
+              >
+                <p class="protection-uv-stat-label">Today&apos;s Peak UV</p>
+                <p class="protection-uv-stat-value" :style="{ color: getUVColor(uvData.peak_uv_index) }">
+                  {{ uvData.peak_uv_index.toFixed(1) }}
+                  <span v-if="uvData.peak_uv_label" class="protection-uv-stat-sub">({{ uvData.peak_uv_label }})</span>
+                </p>
+                <p
+                  v-if="uvData.peak_uv_time != null && uvData.timezone != null"
+                  class="protection-uv-stat-time"
+                >
+                  around {{ formatLocalTime(uvData.peak_uv_time, uvData.timezone) }} local time
+                  if you&apos;re heading out ☀️ make sure you slip, slap, slop
+                </p>
+              </div>
+            </div>
             <div class="protection-columns">
               <div class="dosage-card">
                 <h3 class="section-title">Sunscreen Dosage</h3>
@@ -1238,6 +1288,54 @@ onBeforeUnmount(() => {
   color: #4b5563;
 }
 
+.forecast-strip {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  max-width: 560px;
+  overflow-x: auto;
+  padding: 4px 2px 8px;
+}
+
+.forecast-day {
+  flex: 1 0 88px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 8px;
+  border-radius: 12px;
+  background: rgba(255, 249, 240, 0.95);
+  border: 1px solid #e5e7eb;
+  text-align: center;
+}
+
+.forecast-day-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #374151;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.forecast-day-emoji {
+  font-size: 1.6rem;
+  margin: 2px 0;
+}
+
+.forecast-day-temp {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+}
+
+.forecast-day-uv {
+  font-size: 0.78rem;
+  font-weight: 700;
+  margin: 0;
+}
+
 .uv-circle-wrapper {
   display: flex;
   justify-content: center;
@@ -1351,6 +1449,50 @@ onBeforeUnmount(() => {
   font-size: 0.9rem;
   color: #4b5563;
   margin: 0 0 12px;
+}
+
+.protection-uv-stats {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 12px 0 16px;
+}
+
+.protection-uv-stat {
+  flex: 1 1 140px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+}
+
+.protection-uv-stat-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #6b7280;
+  margin: 0 0 4px;
+}
+
+.protection-uv-stat-value {
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin: 0;
+  line-height: 1.1;
+}
+
+.protection-uv-stat-sub {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #6b7280;
+  margin-left: 4px;
+}
+
+.protection-uv-stat-time {
+  font-size: 0.8rem;
+  color: #6b7280;
+  margin: 4px 0 0;
 }
 
 .protection-columns {
