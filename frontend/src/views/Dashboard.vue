@@ -1,8 +1,18 @@
 <script setup>
 
-import { ref, onMounted, onBeforeUnmount } from "vue"
+import { ref, onMounted, onBeforeUnmount, nextTick, watch } from "vue"
 import { RouterLink } from "vue-router"
 import api from "../services/api"
+import L from "leaflet"
+import "leaflet/dist/leaflet.css"
+
+// fix broken default marker icon paths when bundled with Vite
+delete L.Icon.Default.prototype._getIconUrl
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: new URL("leaflet/dist/images/marker-icon-2x.png", import.meta.url).href,
+  iconUrl: new URL("leaflet/dist/images/marker-icon.png", import.meta.url).href,
+  shadowUrl: new URL("leaflet/dist/images/marker-shadow.png", import.meta.url).href,
+})
 
 const uvData = ref(null)
 const error = ref(null)
@@ -11,6 +21,13 @@ const loading = ref(false)
 const city = ref("")
 const locationName = ref("")
 const geoMatches = ref([])
+const searchSuggestions = ref([])
+const isSearchingCity = ref(false)
+const selectedLat = ref(null)
+const selectedLon = ref(null)
+
+let leafletMap = null
+let leafletMarker = null
 
 let reminderTimer = null
 let countdownTimer = null
@@ -26,6 +43,8 @@ const reminderIntervalMinutesKey = "sunscreenReminderIntervalMinutes"
 const reminderEnabledKey = "sunscreenReminderEnabled"
 
 let successPopupTimer = null
+let searchDebounceTimer = null
+let suppressSuggestions = false
 
 /*
 -------------------------------------
@@ -178,15 +197,29 @@ function resetDashboard() {
   city.value = ""
   locationName.value = ""
   geoMatches.value = []
+  searchSuggestions.value = []
   uvData.value = null
   error.value = null
   loading.value = false
   showProtection.value = false
   showSuccessPopup.value = false
+  selectedLat.value = null
+  selectedLon.value = null
 
   if (successPopupTimer) {
     clearTimeout(successPopupTimer)
     successPopupTimer = null
+  }
+
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer)
+    searchDebounceTimer = null
+  }
+
+  if (leafletMap) {
+    leafletMap.remove()
+    leafletMap = null
+    leafletMarker = null
   }
 }
 
@@ -313,6 +346,9 @@ async function fetchUV(lat, lon) {
   loading.value = true
   error.value = null
 
+  selectedLat.value = lat
+  selectedLon.value = lon
+
   try {
 
     const res = await api.get(`/api/uv?lat=${lat}&lon=${lon}`)
@@ -329,7 +365,10 @@ async function fetchUV(lat, lon) {
     successPopupTimer = setTimeout(() => {
       showSuccessPopup.value = false
       successPopupTimer = null
-    }, 1250)
+    }, 2000)
+
+    await nextTick()
+    initOrUpdateMap(lat, lon)
 
   } catch (err) {
 
@@ -345,11 +384,103 @@ async function fetchUV(lat, lon) {
 
 }
 
+function initOrUpdateMap(lat, lon) {
+
+  const el = document.getElementById("location-map")
+  if (!el) return
+
+  if (leafletMap) {
+    leafletMap.setView([lat, lon], 12)
+    if (leafletMarker) {
+      leafletMarker.setLatLng([lat, lon])
+    } else {
+      leafletMarker = L.marker([lat, lon]).addTo(leafletMap)
+    }
+    return
+  }
+
+  leafletMap = L.map(el, { zoomControl: true, scrollWheelZoom: false }).setView([lat, lon], 12)
+
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    maxZoom: 19,
+  }).addTo(leafletMap)
+
+  leafletMarker = L.marker([lat, lon]).addTo(leafletMap)
+
+  setTimeout(() => {
+    if (leafletMap) leafletMap.invalidateSize()
+  }, 100)
+
+}
+
 /*
 -------------------------------------
 SEARCH CITY
 -------------------------------------
 */
+
+function getSuggestionLabel(result) {
+  const a = result.address || {}
+  const place = a.suburb || a.city_district || a.town || a.city || a.village || a.municipality || (result.display_name || "").split(",")[0]
+  const state = a.state || ""
+  return state ? `${place}, ${state}` : place
+}
+
+function chooseSuggestion(result) {
+  const label = getSuggestionLabel(result)
+  suppressSuggestions = true
+  city.value = label
+  locationName.value = label
+  searchSuggestions.value = []
+  geoMatches.value = []
+  fetchUV(parseFloat(result.lat), parseFloat(result.lon))
+}
+
+watch(city, (newValue) => {
+  const trimmed = (newValue || "").trim()
+
+  if (suppressSuggestions) {
+    suppressSuggestions = false
+    return
+  }
+
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer)
+    searchDebounceTimer = null
+  }
+
+  if (!trimmed || trimmed.length < 2) {
+    searchSuggestions.value = []
+    return
+  }
+
+  searchDebounceTimer = setTimeout(async () => {
+    try {
+      isSearchingCity.value = true
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(trimmed)}&countrycodes=AU&format=json&limit=6&addressdetails=1`,
+        { headers: { "Accept-Language": "en" } }
+      )
+      const data = await res.json()
+      if (Array.isArray(data)) {
+        const seen = new Set()
+        searchSuggestions.value = data.filter((r) => {
+          const label = getSuggestionLabel(r)
+          if (seen.has(label)) return false
+          seen.add(label)
+          return true
+        })
+      } else {
+        searchSuggestions.value = []
+      }
+    } catch {
+      searchSuggestions.value = []
+    } finally {
+      isSearchingCity.value = false
+    }
+  }, 150)
+})
 
 function pickLocation(match) {
 
@@ -370,7 +501,7 @@ async function searchCity() {
   uvData.value = null
   geoMatches.value = []
 
-  const GEO_APPID = "f5cb1e66fd5a5900bd73dfd9c44705ea"
+  const GEO_APPID = import.meta.env.VITE_GEO_APPID
 
   if (/^\d{4}$/.test(trimmed)) {
 
@@ -496,6 +627,17 @@ onBeforeUnmount(() => {
     successPopupTimer = null
   }
 
+  if (leafletMap) {
+    leafletMap.remove()
+    leafletMap = null
+    leafletMarker = null
+  }
+
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer)
+    searchDebounceTimer = null
+  }
+
 })
 
 </script>
@@ -614,12 +756,26 @@ onBeforeUnmount(() => {
           v-model="city"
           class="search-input"
           placeholder="Suburb or postcode (Australia)"
+          @keyup.enter="searchCity"
+          autocomplete="off"
         />
         <button class="search-button" @click="searchCity">
           🔍 Search
         </button>
       </section>
 
+      <div v-if="searchSuggestions.length || isSearchingCity" class="search-suggestions">
+        <p v-if="isSearchingCity" class="search-suggestions-loading">Searching…</p>
+        <button
+          v-for="(result, i) in searchSuggestions"
+          :key="i"
+          class="search-suggestion-item"
+          @click="chooseSuggestion(result)"
+        >
+          <span class="search-suggestion-primary">{{ getSuggestionLabel(result) }}</span>
+          <span class="search-suggestion-secondary">{{ (result.display_name || '').split(',').slice(1, 3).join(',').trim() }}</span>
+        </button>
+      </div>
 
       <p v-if="error" class="search-error">{{ error }}</p>
 
@@ -638,41 +794,43 @@ onBeforeUnmount(() => {
       </div>
 
       <section v-if="uvData" class="uv-section">
-        <div
-          v-if="uvData.max_temperature != null || uvData.sunrise != null || uvData.sunset != null || uvData.weather_id != null"
-          class="weather-strip"
-        >
-          <span v-if="locationName" class="weather-strip-location">{{ locationName }}</span>
-          <span
-            v-if="uvData.timezone != null"
-            class="weather-strip-date"
-          >
-            {{ formatLocalDate(uvData.timezone) }}
-          </span>
-          <span v-if="uvData.weather_id != null" class="weather-strip-emoji" aria-hidden="true">{{ getWeatherEmoji(uvData.weather_id) }}</span>
-          <span v-if="uvData.max_temperature != null" class="weather-strip-temp">
-            {{ Math.round(uvData.max_temperature) }} °C
-          </span>
-          <span v-if="uvData.sunrise != null && uvData.timezone != null" class="weather-strip-time">Sunrise {{ formatLocalTime(uvData.sunrise, uvData.timezone) }}</span>
-          <span v-if="uvData.sunset != null && uvData.timezone != null" class="weather-strip-time">Sunset {{ formatLocalTime(uvData.sunset, uvData.timezone) }}</span>
-        </div>
+        <div class="weather-map-card">
+          <div class="weather-map-left">
+            <div class="weather-meta-row">
+              <span v-if="locationName" class="weather-strip-location">{{ locationName }}</span>
+              <span v-if="uvData.timezone != null" class="weather-strip-date">{{ formatLocalDate(uvData.timezone) }}</span>
+            </div>
+            <div class="weather-meta-row">
+              <span v-if="uvData.weather_id != null" class="weather-strip-emoji" aria-hidden="true">{{ getWeatherEmoji(uvData.weather_id) }}</span>
+              <span v-if="uvData.max_temperature != null" class="weather-strip-temp">{{ Math.round(uvData.max_temperature) }} °C</span>
+            </div>
+            <div class="weather-meta-row">
+              <span v-if="uvData.sunrise != null && uvData.timezone != null" class="weather-strip-time">🌅 Sunrise {{ formatLocalTime(uvData.sunrise, uvData.timezone) }}</span>
+              <span v-if="uvData.sunset != null && uvData.timezone != null" class="weather-strip-time">🌇 Sunset {{ formatLocalTime(uvData.sunset, uvData.timezone) }}</span>
+            </div>
 
-        <div v-if="uvData.forecast && uvData.forecast.length" class="forecast-strip">
-          <div
-            v-for="(day, i) in uvData.forecast"
-            :key="i"
-            class="forecast-day"
-          >
-            <p class="forecast-day-label">{{ formatForecastDay(day.dt, uvData.timezone) }}</p>
-            <p class="forecast-day-emoji" aria-hidden="true">{{ getWeatherEmoji(day.weather_id) }}</p>
-            <p v-if="day.max_temp != null" class="forecast-day-temp">{{ Math.round(day.max_temp) }}°C</p>
-            <p
-              v-if="day.uvi != null"
-              class="forecast-day-uv"
-              :style="{ color: getUVColor(day.uvi) }"
-            >
-              UV {{ day.uvi.toFixed(0) }}
-            </p>
+            <div v-if="uvData.forecast && uvData.forecast.length" class="forecast-strip">
+              <div
+                v-for="(day, i) in uvData.forecast"
+                :key="i"
+                class="forecast-day"
+              >
+                <p class="forecast-day-label">{{ formatForecastDay(day.dt, uvData.timezone) }}</p>
+                <p class="forecast-day-emoji" aria-hidden="true">{{ getWeatherEmoji(day.weather_id) }}</p>
+                <p v-if="day.max_temp != null" class="forecast-day-temp">{{ Math.round(day.max_temp) }}°C</p>
+                <p
+                  v-if="day.uvi != null"
+                  class="forecast-day-uv"
+                  :style="{ color: getUVColor(day.uvi) }"
+                >
+                  UV {{ day.uvi.toFixed(0) }}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="selectedLat != null && selectedLon != null" class="weather-map-right">
+            <div id="location-map" class="map-container"></div>
           </div>
         </div>
 
@@ -810,7 +968,7 @@ onBeforeUnmount(() => {
         <span class="reminder-popup-icon">✅</span>
         <h2 class="reminder-popup-title">Location loaded</h2>
         <p class="reminder-popup-text">
-          Loaded data for {{ locationName || "your location" }}.
+          Loading data for {{ locationName || "your location" }}…
         </p>
         <button
           class="reminder-popup-btn"
@@ -1177,6 +1335,56 @@ onBeforeUnmount(() => {
   background: #ea580c;
 }
 
+.search-suggestions {
+  max-width: 560px;
+  margin: 0 auto 4px;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.search-suggestions-loading {
+  padding: 10px 16px;
+  font-size: 0.85rem;
+  color: #6b7280;
+  margin: 0;
+}
+
+.search-suggestion-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  width: 100%;
+  padding: 10px 16px;
+  border: none;
+  border-bottom: 1px solid #f3f4f6;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+}
+
+.search-suggestion-item:last-child {
+  border-bottom: none;
+}
+
+.search-suggestion-item:hover {
+  background: #fff7ed;
+}
+
+.search-suggestion-primary {
+  font-size: 0.93rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.search-suggestion-secondary {
+  font-size: 0.78rem;
+  color: #6b7280;
+}
+
 .search-error {
   text-align: center;
   margin: 8px auto 0;
@@ -1251,28 +1459,47 @@ onBeforeUnmount(() => {
   gap: 10px;
 }
 
-.weather-strip {
+.weather-map-card {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 12px 20px;
-  padding: 10px 16px;
-  border-radius: 12px;
-  background: rgba(255, 249, 240, 0.95);
+  width: 100%;
+  max-width: 560px;
+  border-radius: 16px;
+  overflow: hidden;
   border: 1px solid #e5e7eb;
-  font-size: 0.9rem;
-  color: #374151;
+  background: rgba(255, 249, 240, 0.98);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+}
+
+.weather-map-left {
+  flex: 1 1 0;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.weather-map-right {
+  flex: 0 0 220px;
+  border-left: 1px solid #e5e7eb;
+}
+
+.weather-meta-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
 }
 
 .weather-strip-location {
-  font-weight: 600;
+  font-weight: 700;
+  font-size: 0.95rem;
   color: #111827;
 }
 
 .weather-strip-date {
-  font-size: 0.85rem;
-  color:rgb(12, 12, 12);
+  font-size: 0.82rem;
+  color: #6b7280;
 }
 
 .weather-strip-emoji {
@@ -1281,20 +1508,21 @@ onBeforeUnmount(() => {
 
 .weather-strip-temp {
   font-weight: 600;
+  font-size: 1rem;
   color: #111827;
 }
 
 .weather-strip-time {
+  font-size: 0.82rem;
   color: #4b5563;
 }
 
 .forecast-strip {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   width: 100%;
-  max-width: 560px;
   overflow-x: auto;
-  padding: 4px 2px 8px;
+  padding: 2px 0 4px;
 }
 
 .forecast-day {
@@ -1334,6 +1562,11 @@ onBeforeUnmount(() => {
   font-size: 0.78rem;
   font-weight: 700;
   margin: 0;
+}
+
+.map-container {
+  height: 240px;
+  width: 100%;
 }
 
 .uv-circle-wrapper {
@@ -1713,6 +1946,20 @@ onBeforeUnmount(() => {
 
   .protection-divider {
     display: none;
+  }
+
+  .weather-map-card {
+    flex-direction: column;
+  }
+
+  .weather-map-right {
+    flex: 0 0 auto;
+    border-left: none;
+    border-top: 1px solid #e5e7eb;
+  }
+
+  .map-container {
+    height: 180px;
   }
 }
 </style>
