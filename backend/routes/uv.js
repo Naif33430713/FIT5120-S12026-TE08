@@ -48,8 +48,6 @@ router.get("/", async (req, res) => {
         uv_max: { gte: uvIndex }
       }
     })
-
-
     // use OpenWeather's daily + hourly data for today
     let peakUvIndex = null
     let peakUvTime = null

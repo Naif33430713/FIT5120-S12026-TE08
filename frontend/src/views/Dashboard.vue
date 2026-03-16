@@ -349,18 +349,17 @@ async function fetchUV(lat, lon) {
   selectedLat.value = lat
   selectedLon.value = lon
 
+  if (successPopupTimer) {
+    clearTimeout(successPopupTimer)
+    successPopupTimer = null
+  }
+  showSuccessPopup.value = true
+
   try {
 
     const res = await api.get(`/api/uv?lat=${lat}&lon=${lon}`)
 
     uvData.value = res.data
-
-    if (successPopupTimer) {
-      clearTimeout(successPopupTimer)
-      successPopupTimer = null
-    }
-
-    showSuccessPopup.value = true
 
     successPopupTimer = setTimeout(() => {
       showSuccessPopup.value = false
@@ -372,6 +371,7 @@ async function fetchUV(lat, lon) {
 
   } catch (err) {
 
+    showSuccessPopup.value = false
     console.error(err)
     uvData.value = null
     error.value = err.response?.status === 400 && err.response?.data?.error
@@ -961,21 +961,17 @@ onBeforeUnmount(() => {
 
     <div
       v-if="showSuccessPopup"
-      class="reminder-overlay"
-      @click.self="showSuccessPopup = false"
+      class="reminder-overlay loading-overlay"
     >
-      <div class="reminder-popup">
-        <span class="reminder-popup-icon">✅</span>
-        <h2 class="reminder-popup-title">Location loaded</h2>
+      <div class="reminder-popup loading-popup">
+        <span class="reminder-popup-icon loading-spinner-icon">⏳</span>
+        <h2 class="reminder-popup-title">Loading Info</h2>
         <p class="reminder-popup-text">
-          Loading data for {{ locationName || "your location" }}…
+          Fetching UV data for {{ locationName || "your location" }}…
         </p>
-        <button
-          class="reminder-popup-btn"
-          @click="showSuccessPopup = false"
-        >
-          OK
-        </button>
+        <div class="loading-bar-track">
+          <div class="loading-bar-fill"></div>
+        </div>
       </div>
     </div>
 
@@ -1016,28 +1012,37 @@ onBeforeUnmount(() => {
   z-index: 0;
 }
 
+@keyframes bgEmojiFloat {
+  0%   { opacity: 0;    transform: translateY(0px) scale(0.9); }
+  20%  { opacity: 0.16; transform: translateY(-6px) scale(1); }
+  50%  { opacity: 0.13; transform: translateY(-12px) scale(1.05); }
+  80%  { opacity: 0.16; transform: translateY(-6px) scale(1); }
+  100% { opacity: 0;    transform: translateY(0px) scale(0.9); }
+}
+
 .bg-emoji {
   position: absolute;
   font-size: 2rem;
-  opacity: 0.15;
+  opacity: 0;
+  animation: bgEmojiFloat 8s ease-in-out infinite;
 }
 
-.bg-emoji-1 { top: 8%; left: 5%; font-size: 2.5rem; }
-.bg-emoji-2 { top: 15%; right: 8%; font-size: 1.8rem; opacity: 0.12; }
-.bg-emoji-3 { top: 25%; left: 12%; font-size: 2.2rem; opacity: 0.1; }
-.bg-emoji-4 { top: 40%; right: 4%; font-size: 1.6rem; }
-.bg-emoji-5 { top: 55%; left: 3%; font-size: 2rem; opacity: 0.12; }
-.bg-emoji-6 { top: 65%; right: 15%; font-size: 2.4rem; opacity: 0.1; }
-.bg-emoji-7 { top: 75%; left: 8%; font-size: 2.8rem; opacity: 0.12; }
-.bg-emoji-8 { bottom: 20%; right: 6%; font-size: 1.8rem; }
-.bg-emoji-9 { bottom: 15%; left: 15%; font-size: 2.2rem; opacity: 0.1; }
-.bg-emoji-10 { bottom: 35%; right: 25%; font-size: 1.5rem; opacity: 0.12; }
-.bg-emoji-11 { top: 50%; left: 2%; font-size: 1.4rem; opacity: 0.08; }
-.bg-emoji-12 { top: 85%; right: 10%; font-size: 1.6rem; opacity: 0.1; }
-.bg-emoji-12b { top: 45%; left: 6%; font-size: 2rem; opacity: 0.12; }
-.bg-emoji-13 { top: 20%; right: 20%; font-size: 2rem; opacity: 0.12; }
-.bg-emoji-14 { top: 35%; right: 30%; font-size: 2.2rem; opacity: 0.11; }
-.bg-emoji-15 { top: 60%; right: 5%; font-size: 1.9rem; opacity: 0.1; }
+.bg-emoji-1  { top: 8%;    left: 5%;   font-size: 2.5rem; animation-duration: 9s;  animation-delay: 0s;    }
+.bg-emoji-2  { top: 15%;   right: 8%;  font-size: 1.8rem; animation-duration: 11s; animation-delay: 1.5s;  }
+.bg-emoji-3  { top: 25%;   left: 12%;  font-size: 2.2rem; animation-duration: 7s;  animation-delay: 3s;    }
+.bg-emoji-4  { top: 40%;   right: 4%;  font-size: 1.6rem; animation-duration: 13s; animation-delay: 0.8s;  }
+.bg-emoji-5  { top: 55%;   left: 3%;   font-size: 2rem;   animation-duration: 10s; animation-delay: 4.5s;  }
+.bg-emoji-6  { top: 65%;   right: 15%; font-size: 2.4rem; animation-duration: 8s;  animation-delay: 2.2s;  }
+.bg-emoji-7  { top: 75%;   left: 8%;   font-size: 2.8rem; animation-duration: 12s; animation-delay: 6s;    }
+.bg-emoji-8  { bottom: 20%; right: 6%; font-size: 1.8rem; animation-duration: 9s;  animation-delay: 1s;    }
+.bg-emoji-9  { bottom: 15%; left: 15%; font-size: 2.2rem; animation-duration: 14s; animation-delay: 3.5s;  }
+.bg-emoji-10 { bottom: 35%; right: 25%; font-size: 1.5rem; animation-duration: 7s; animation-delay: 5s;    }
+.bg-emoji-11 { top: 50%;   left: 2%;   font-size: 1.4rem; animation-duration: 11s; animation-delay: 7s;    }
+.bg-emoji-12 { top: 85%;   right: 10%; font-size: 1.6rem; animation-duration: 10s; animation-delay: 2.8s;  }
+.bg-emoji-12b{ top: 45%;   left: 6%;   font-size: 2rem;   animation-duration: 8s;  animation-delay: 0.4s;  }
+.bg-emoji-13 { top: 20%;   right: 20%; font-size: 2rem;   animation-duration: 15s; animation-delay: 4s;    }
+.bg-emoji-14 { top: 35%;   right: 30%; font-size: 2.2rem; animation-duration: 9s;  animation-delay: 6.5s;  }
+.bg-emoji-15 { top: 60%;   right: 5%;  font-size: 1.9rem; animation-duration: 12s; animation-delay: 1.8s;  }
 
 .app-header {
   position: relative;
@@ -1864,6 +1869,47 @@ onBeforeUnmount(() => {
   justify-content: center;
   background: rgba(0, 0, 0, 0.45);
   animation: fadeIn 0.2s ease;
+}
+
+.loading-overlay {
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(3px);
+}
+
+.loading-popup {
+  padding: 32px 36px 28px;
+}
+
+@keyframes spinHourglass {
+  0%   { transform: rotate(0deg); }
+  50%  { transform: rotate(180deg); }
+  100% { transform: rotate(180deg); }
+}
+
+.loading-spinner-icon {
+  animation: spinHourglass 1.4s ease-in-out infinite;
+  display: inline-block;
+}
+
+.loading-bar-track {
+  margin-top: 16px;
+  height: 6px;
+  background: #f3f4f6;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+@keyframes loadingBar {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.loading-bar-fill {
+  height: 100%;
+  width: 50%;
+  background: linear-gradient(90deg, #f97316, #fbbf24);
+  border-radius: 999px;
+  animation: loadingBar 1.2s ease-in-out infinite;
 }
 
 .reminder-popup {
