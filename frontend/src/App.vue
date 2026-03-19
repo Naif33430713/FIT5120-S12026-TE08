@@ -70,12 +70,14 @@ const {
   border: 1.5px solid rgba(34, 197, 94, 0.5);
   border-radius: 999px;
   padding: 8px 20px;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 0.88rem;
   font-weight: 600;
   color: #166534;
   box-shadow: 0 4px 16px rgba(34, 197, 94, 0.2);
   white-space: nowrap;
   backdrop-filter: blur(8px);
+  letter-spacing: 0.01em;
 }
 
 .pill-dot {
@@ -148,6 +150,8 @@ const {
   align-items: center;
   gap: 14px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #111827;
 }
 
 .popup-icon {
