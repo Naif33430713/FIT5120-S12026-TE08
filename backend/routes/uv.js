@@ -96,6 +96,14 @@ router.get("/", async (req, res) => {
     }
     if (peakUvTime != null) payload.peak_uv_time = peakUvTime
 
+    // 24-hour UV breakdown for the chart
+    if (Array.isArray(data.hourly) && data.hourly.length > 0) {
+      payload.hourly_uv = data.hourly.slice(0, 24).map((h) => ({
+        dt: h.dt,
+        uvi: typeof h.uvi === "number" ? h.uvi : 0
+      }))
+    }
+
     // 5-day forecast from daily data (days 0-4)
     if (Array.isArray(data.daily) && data.daily.length > 0) {
       payload.forecast = data.daily.slice(0, 5).map((day) => {
