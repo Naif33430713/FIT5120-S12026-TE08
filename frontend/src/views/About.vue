@@ -4,7 +4,21 @@ import { RouterLink } from "vue-router"
 
 <template>
   <div class="about-root">
-    <section class="about-card">
+    <header class="app-header">
+      <div class="app-logo">
+        <span class="app-logo-emoji">☀️</span>
+        <span class="app-logo-text">SunShield</span>
+      </div>
+      <nav class="app-nav">
+        <RouterLink to="/" class="app-nav-link">Home</RouterLink>
+        <RouterLink to="/dashboard" class="app-nav-link">Dashboard</RouterLink>
+        <RouterLink to="/reminder" class="app-nav-link">Reminder</RouterLink>
+        <RouterLink to="/about" class="app-nav-link app-nav-link--active">About</RouterLink>
+      </nav>
+    </header>
+
+    <div class="about-content">
+    <section class="about-card animate-up">
       <h1 class="about-title">About SunShield</h1>
       <p class="about-intro">
         SunShield is a UV awareness and prevention app designed for young Australians
@@ -14,7 +28,7 @@ import { RouterLink } from "vue-router"
       </p>
 
       <div class="about-grid">
-        <div class="about-section">
+        <div class="about-section animate-up" style="--delay: 0.15s">
           <h2>The problem we&apos;re tackling</h2>
           <ul>
             <li>
@@ -35,7 +49,7 @@ import { RouterLink } from "vue-router"
           </ul>
         </div>
 
-        <div class="about-section">
+        <div class="about-section animate-up" style="--delay: 0.25s">
           <h2>How SunShield helps</h2>
           <p>
             SunShield focuses on two key areas: tracking UV levels and supporting
@@ -64,7 +78,7 @@ import { RouterLink } from "vue-router"
         </div>
       </div>
 
-      <div class="about-sources">
+      <div class="about-sources animate-up" style="--delay: 0.35s">
         <h2>Data &amp; research sources</h2>
         <p class="sources-intro">
           SunShield combines live environmental data with evidence‑based health guidance.
@@ -132,7 +146,7 @@ import { RouterLink } from "vue-router"
         </div>
       </div>
 
-      <div class="about-legal">
+      <div class="about-legal animate-up" style="--delay: 0.45s">
       <div class="about-section">
         <h2>Privacy Statement</h2>
         <p>
@@ -148,24 +162,93 @@ import { RouterLink } from "vue-router"
       </div>
       </div>
 
-      <div class="about-actions">
-        <RouterLink to="/" class="about-back">
-          ← Back to dashboard
-        </RouterLink>
-      </div>
     </section>
+    </div>
   </div>
 </template>
 
 <style scoped>
+/* ── Entrance animations ── */
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(28px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-up {
+  animation: slideUp 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: var(--delay, 0s);
+}
+
 .about-root {
   min-height: 100vh;
   background: linear-gradient(to bottom, #ffeda0, #ffa585);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  padding: 16px 32px;
+  background: #ffffffcc;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+  backdrop-filter: blur(6px);
+}
+
+.app-logo {
+  font-weight: 700;
+  font-size: 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.app-logo-emoji {
+  font-size: 1.5rem;
+}
+
+.app-logo-text {
+  letter-spacing: 0.02em;
+}
+
+.app-nav {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.app-nav-link {
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #374151;
+  text-decoration: none;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.app-nav-link:hover {
+  background: rgba(255, 255, 255, 0.9);
+  color: #111827;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.app-nav-link--active {
+  background: #f97316;
+  color: #ffffff;
+  box-shadow: 0 4px 10px rgba(249, 115, 22, 0.3);
+}
+
+.about-content {
+  display: flex;
   justify-content: center;
-  padding: 32px 16px;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  padding: 32px 16px 48px;
 }
 
 .about-card {
@@ -302,31 +385,6 @@ import { RouterLink } from "vue-router"
   margin-bottom: 4px;
 }
 
-.about-actions {
-  margin-top: 18px;
-}
-
-.about-back {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 8px 14px;
-  border-radius: 999px;
-  border: 1px solid #f97316;
-  background: #f97316;
-  color: #ffffff;
-  font-size: 0.9rem;
-  font-weight: 600;
-  text-decoration: none;
-  box-shadow: 0 4px 10px rgba(249, 115, 22, 0.25);
-  cursor: pointer;
-  transition: transform 0.1s ease, box-shadow 0.1s ease, background 0.1s ease;
-}
-
-.about-back:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 14px rgba(249, 115, 22, 0.3);
-}
 
 @media (max-width: 700px) {
   .about-card {
