@@ -87,7 +87,7 @@ import { RouterLink } from "vue-router"
                 <div class="step-icon">🧴</div>
                 <div class="step-body">
                   <p class="step-label">Get your plan</p>
-                  <p class="step-desc">Sunscreen dosage, clothing tips, and 5-day forecast</p>
+                  <p class="step-desc">Sunscreen dosage, clothing tips, and set reminders</p>
                 </div>
               </div>
             </div>
@@ -161,7 +161,8 @@ import { RouterLink } from "vue-router"
 
 /* ── Nav ── */
 .app-header {
-  position: relative;
+  position: sticky;
+  top: 0;
   z-index: 10;
   display: flex;
   align-items: center;

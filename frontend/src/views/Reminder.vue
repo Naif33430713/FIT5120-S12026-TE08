@@ -138,7 +138,8 @@ function toggleTestMode() {
 
 /* ── Navbar — mirrors Dashboard.vue exactly ── */
 .app-header {
-  position: relative;
+  position: sticky;
+  top: 0;
   z-index: 10;
   display: flex;
   align-items: center;
